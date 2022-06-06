@@ -3,6 +3,7 @@ const fs = require("fs");
 const { Client, Collection, Intents } = require("discord.js");
 const mysql = require("mysql2/promise");
 const { stage } = require("./config.json");
+const { channel } = require('diagnostics_channel');
 
 // Create a new client instance
 const client = new Client({ 
@@ -139,65 +140,6 @@ const guildCreate = async (guild) => {
 }
 
 
-// Login to Discord with your client's token
-client.once("ready", async () => {
-	client.user.setPresence({
-		status: "available",
-		activities: [{
-			name: "Blackjack",
-			type: "PLAYING"
-		}]
-	});
-  
-	const conn = await pool.getConnection();
-	try{
-		//set up any new guilds that were
-		client.guilds.cache.forEach(async guild => {
-			const guildDB = await conn.query('SELECT * FROM `guild` WHERE guild_id=?;',[guild.id]);
-			if(guildDB[0].length < 1){
-				guildCreate(guild);
-			} else {
-				//guild exists in db but we still need to add any new members
-				const members = await guild.members.fetch()
-				for await (const member of members){
-					await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
-						[member.id, member.displayName]);
-				}
-			}
-		});
-	} finally{
-		//release pool connection
-		conn.release();
-	}
-
-	// const guild = client.guilds.cache.get('825883828798881822'); 
-	// const channel = await guild.channels.cache.get('865713507136045117');
-	// const msg = await channel.send(`Please follow these rules!
-	// 1) Follow the Discord terms of service.
-	// 2) Members must be 13 years or older.
-	// 3) Stay on topic and do not spam.
-	// 4) Do not pick fights or insult other members.
-	// 5) No bigoted, illegal, or NSFW content.
-	// React bellow to agree to the rules and choose a name color.
-	
-	// Member roles will be removed if users are not active for about a month but it is easy to rejoin by reacting again.`);
-
-
-	// const conn2 = await pool.getConnection();
-	// try{
-	// 	const colorDB = await conn2.query('SELECT * FROM `color`;');
-	// 	colorDB[0].forEach(color => msg.react(`<:${color.name}:${color.emoji_id}>`));
-	// } finally{
-	// 	//release pool connection
-	// 	conn2.release();
-	// }
-	
-	const startMsg = (stage == 'production') ? 'Aineko is ready!' : 'Aineko Beta is ready!';
-	console.log(startMsg);
-});
-
-
-
 
 
 client.on("interactionCreate", async interaction => {
@@ -291,6 +233,30 @@ client.on('messageReactionAdd', async (reaction, user) => {
 				}
 			break;
 			case 'role':
+				const emoji = (reaction.emoji.id) ? reaction.emoji.id : reaction.emoji.name;
+				//identifiy role
+				const roleButtonDB = await conn.query('SELECT * FROM `role_button` WHERE `message_id` = ? AND `emoji` = ?;',
+					[reaction.message.id, emoji]);
+				//remove reaction if not a role button
+				if(roleButtonDB[0].length < 1) return reaction.users.remove(member.id);
+				//add new role
+				member.roles.add(roleButtonDB[0][0].role_id);
+				//remove existing roles and reactions if exclusive
+				if(menuDB[0][0].exclusive){
+					//remove users existing reactions
+					reaction.message.reactions.cache.forEach(async existingReaction => {
+						const existingEmoji = (existingReaction.emoji.id) ? existingReaction.emoji.id : existingReaction.emoji.name;
+						//don't remove new reaction
+						if(existingEmoji != emoji){
+							//remove reaction
+							await existingReaction.users.remove(member.id);
+							//remove existing role
+							const existingRoleButtonDB = await conn.query('SELECT `role_id` FROM `role_button` WHERE `message_id` = ? AND `emoji` = ?;',
+								[reaction.message.id, existingEmoji]);
+							member.roles.remove(existingRoleButtonDB[0][0].role_id);
+						}
+					});
+				}
 			break;
 		}
 	} finally{
@@ -301,6 +267,38 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
 
 client.on('messageReactionRemove', async (reaction, user) => {
+	if (reaction.message.partial) await reaction.message.fetch();
+	if (reaction.partial) await reaction.fetch();
+
+	//ignore dms
+	if(reaction.message.channel.type == 'dm') return;
+
+	//ignore self
+	if(user.id == client.user.id) return;
+
+	const guild = reaction.message.guild;
+	const member = await guild.members.cache.get(user.id);
+
+	const conn = await pool.getConnection();
+	try{
+		const menuDB = await conn.query('SELECT * FROM `menu` WHERE `message_id`=?;', [reaction.message.id]);
+		if(menuDB[0].length < 1) return;
+
+		switch(menuDB[0][0].type){
+			case 'role':
+				const emoji = (reaction.emoji.id) ? reaction.emoji.id : reaction.emoji.name;
+				//identifiy role
+				const roleButtonDB = await conn.query('SELECT `role_id` FROM `role_button` WHERE `message_id` = ? AND `emoji` = ?;',
+					[reaction.message.id, emoji]);
+				if(roleButtonDB[0].length < 1) return;
+				//remove role from member
+				member.roles.remove(roleButtonDB[0][0].role_id);
+			break;
+		}
+	} finally{
+		//release pool connection
+		conn.release();
+	}
 });
 
 
@@ -320,6 +318,60 @@ client.on('guildDelete', async guild => {
 		conn.release();
 	}
 	console.log(`Removed from server: ${guild.name}`);
+});
+
+
+
+// Login to Discord with your client's token
+client.once("ready", async () => {
+	client.user.setPresence({
+		status: "available",
+		activities: [{
+			name: "Blackjack",
+			type: "PLAYING"
+		}]
+	});
+  
+	const conn = await pool.getConnection();
+	try{
+		//set up any new guilds that were
+		client.guilds.cache.forEach(async guild => {
+			const guildDB = await conn.query('SELECT * FROM `guild` WHERE guild_id=?;',[guild.id]);
+			if(guildDB[0].length < 1){
+				guildCreate(guild);
+			} else {
+				//guild exists in db but we still need to add any new members
+				const members = await guild.members.fetch()
+				for await (const member of members){
+					await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
+						[member.id, member.displayName]);
+				}
+			}
+		});
+	} finally{
+		//release pool connection
+		conn.release();
+	}
+
+	// const guild = await client.guilds.fetch('825883828798881822'); 
+	// const channel = await guild.channels.fetch('865713507136045117');
+	// const msg = await channel.messages.fetch('983457946572828692');
+	// const emoji = msg.content.replace(/<|a|>|(:.*:)/g, '');
+	// console.log(emoji);
+
+	// const conn2 = await pool.getConnection();
+	// try{
+	// 	const colorDB = await conn2.query('SELECT * FROM `color`;');
+	// 	colorDB[0].forEach(color => msg.react(`<:${color.name}:${color.emoji_id}>`));
+	// } finally{
+	// 	//release pool connection
+	// 	conn2.release();
+	// }  
+
+
+	
+	const startMsg = (stage == 'production') ? 'Aineko is ready!' : 'Aineko Beta is ready!';
+	console.log(startMsg);
 });
 
 
