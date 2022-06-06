@@ -1,0 +1,22 @@
+{
+  "name": "aineko",
+  "version": "1.0.5",
+  "description": "A general purpose discord bot with cat like features!",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "mschutzner",
+  "license": "ISC",
+  "dependencies": {
+    "@discordjs/builders": "^0.13.0",
+    "@discordjs/rest": "^0.4.1",
+    "canvas": "^2.9.1",
+    "chroma-js": "^2.4.2",
+    "discord-api-types": "^0.33.0",
+    "discord.js": "^13.7.0",
+    "dotenv": "^16.0.1",
+    "mysql2": "^2.3.3",
+    "perspective-transform": "^1.1.3"
+  }
+}

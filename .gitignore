@@ -1,0 +1,11 @@
+#Application Configuration
+config.json
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+#Environment Variables
+.env
+.env.local
