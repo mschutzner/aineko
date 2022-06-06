@@ -264,8 +264,8 @@ client.on('messageReactionAdd', async (reaction, user) => {
 					await reaction.message.reactions.cache.find(r => r.emoji.id == curColorEmojiId).users.remove(member.id);
 
 					//remove existing role
-					const curColorRoleDB = await conn.query('SELECT `role_id` FROM `color_role` WHERE `color_id` = ?;',
-						[curColor]);
+					const curColorRoleDB = await conn.query('SELECT `role_id` FROM `color_role` WHERE `guild_id`= ? AND `color_id` = ?;',
+						[guild.id, curColor]);
 					const curColorRoleId = curColorRoleDB[0][0].role_id;
 					await member.roles.remove(curColorRoleId);
 
@@ -297,11 +297,11 @@ client.on('messageReactionAdd', async (reaction, user) => {
 		//release pool connection
 		conn.release();
 	}
-})
+});
 
 
 client.on('messageReactionRemove', async (reaction, user) => {
-})
+});
 
 
 client.on('guildCreate', async guild => {
