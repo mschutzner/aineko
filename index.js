@@ -47,9 +47,38 @@ const guildCreate = async (guild) => {
 	const conn = await pool.getConnection();
 	try{
 		//see if the guild already exists in the database.
-		const guildDB = await conn.query('SELECT `member_role_id` FROM `guild` WHERE `guild_id` = ?;', [guild.id]);
-		if(guildDB[0].length > 0){
-			//Guild is already in DB
+		const guildDB = await conn.query('SELECT * FROM `guild` WHERE `guild_id` = ?;', [guild.id]);
+		if(guildDB[0].length > 0){//Guild is already in DB
+			//see if champion role still exists
+			const championRole = await guild.roles.fetch(guildDB[0][0].champion_role_id);
+			if(!championRole){
+				//make a new champion role
+				const newRole = await guild.roles.create({
+					name: "Champion",
+					permissions: "0",
+					hoist: true,
+					position: hightestRole-1
+				});
+				await conn.query(
+					'UPDATE `guild` SET `champion_role_id` = ? WHERE `guild_id` = ?;',
+					[newRole.id, guild.id]
+				);
+			}
+			//see if regular role still exists
+			const regularRole = await guild.roles.fetch(guildDB[0][0].regular_role_id);
+			if(!regularRole){
+				//make a new regular role
+				const newRole = await guild.roles.create({
+					name: "Regular",
+					permissions: "0",
+					hoist: true,
+					position: hightestRole-2
+				});
+				await conn.query(
+					'UPDATE `guild` SET `regular_role_id` = ? WHERE `guild_id` = ?;',
+					[newRole.id, guild.id]
+				);
+			}
 			//see if member role still exists
 			const memberRole = await guild.roles.fetch(guildDB[0][0].member_role_id);
 			if(!memberRole){
@@ -57,40 +86,53 @@ const guildCreate = async (guild) => {
 				const newRole = await guild.roles.create({
 					name: "Member",
 					permissions: "1024",
-					position: hightestRole-1
+					hoist: true,
+					position: hightestRole-3
 				});
 				await conn.query(
-					'UPDATE `guild` SET `active` = 1, `member_role_id` = ? WHERE `guild_id` = ?;',
+					'UPDATE `guild` SET `member_role_id` = ? WHERE `guild_id` = ?;',
 					[newRole.id, guild.id]
 				);
-			} else {
-				await conn.query(
-					'UPDATE `guild` SET `active` = 1 WHERE `guild_id` = ?;',
-					[guild.id]
-				);
 			}
+			await conn.query(
+				'UPDATE `guild` SET `active` = 1 WHERE `guild_id` = ?;',
+				[guild.id]
+			);
 		} else {
+			const championRole = await guild.roles.create({
+				name: "Champion",
+				permissions: "0",
+				hoist: true,
+				position: hightestRole-1
+			});
+			const regularRole = await guild.roles.create({
+				name: "Regular",
+				permissions: "0",
+				hoist: true,
+				position: hightestRole-2
+			});
 			//make a member role
 			const memberRole = await guild.roles.create({
 				name: "Member",
 				permissions: "1024",
-				position: hightestRole-1
+				hoist: true,
+				position: hightestRole-3
 			});
 			//add the guild to the database
 			await conn.query(
-				'INSERT IGNORE INTO `guild` (guild_id, name, member_role_id) VALUES (?, ?, ?);',
-				[guild.id, guild.name, memberRole.id]
+				'INSERT IGNORE INTO `guild` (guild_id, name, member_role_id, regular_role_id, champion_role_id) VALUES (?, ?, ?, ?, ?);',
+				[guild.id, guild.name, memberRole.id, regularRole.id, championRole.id]
 			);
 		}
 
 		//get the list of colors
-		const colors = await conn.query('SELECT * FROM `color`;');
+		const colors = await conn.query('SELECT * FROM `color` ORDER BY `_id`;');
 		//make roles for each color
 		if(colors[0].length < 1) throw new Error(`No colors found when joining guild: ${guild.name}.`)
-		colors[0].forEach(async color => {
+		for await (const color of colors[0]){
 			//see if there are existing roles and if not create them
 			const roleDB = await conn.query(
-				'SELECT * FROM `color_role` WHERE `color_id` = ? AND `guild_id` = ? ORDER BY `_id`;',
+				'SELECT * FROM `color_role` WHERE `color_id` = ? AND `guild_id` = ?;',
 				[color._id, guild.id]
 			);
 			//fetch the role if it already exists;
@@ -102,7 +144,7 @@ const guildCreate = async (guild) => {
 						name: color.name,
 						color: '#'+color.hex,
 						permissions: "0",
-						position: hightestRole-1-color._id
+						position: hightestRole-3-color._id
 					});
 					await conn.query(
 						'UPDATE `color_role` SET `role_id` = ? WHERE `color_id` = ? AND `guild_id` = ?;',
@@ -115,14 +157,14 @@ const guildCreate = async (guild) => {
 					name: color.name,
 					color: '#'+color.hex,
 					permissions: "0",
-					position: hightestRole-1-color._id
+					position: hightestRole-3-color._id
 				});
 				await conn.query(
 					'INSERT INTO `color_role` (color_id, guild_id, role_id) VALUES (?, ?, ?);',
 					[color._id, guild.id, newRole.id]
 				);
-			}
-		});
+				}
+		}
 
 		//add any new members to the DB
 		const members = await guild.members.fetch()
