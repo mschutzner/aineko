@@ -2,8 +2,7 @@ require('dotenv').config();
 const fs = require("fs");
 const { Client, Collection, Intents } = require("discord.js");
 const mysql = require("mysql2/promise");
-const { stage } = require("./config.json");
-const { channel } = require('diagnostics_channel');
+const { stage, lurkerMin, memberMin, regularMin, championMin, decayRate, tickRate } = require("./config.json");
 
 // Create a new client instance
 const client = new Client({ 
@@ -36,7 +35,64 @@ for (const file of commandFiles) {
 	// With the key as the command name and the value as the exported module
 	client.commands.set(command.data.name, command);
 }
+client.cooldowns = [];
 
+client.on("interactionCreate", async interaction => {
+	if (!interaction.isCommand()) return;
+
+	const command = client.commands.get(interaction.commandName);
+
+	if (!command) return;
+
+	const guild = interaction.guild;
+	const member = interaction.member;
+
+	const conn = await pool.getConnection();
+	try{
+		conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
+	} finally{
+		//release pool connection
+		conn.release();
+	}
+
+	try {
+		if(command.cooldown){
+			const user = interaction.user;
+			const cooldown = client.cooldowns.find(c => c.user == user.id && c.cmd == command.name);
+			if(cooldown){
+				const timeRemaining = cooldown.endTime - Date.now();
+				if(timeRemaining > 60000){
+					const minutes = Math.round(timeRemaining / 60000);
+					interaction.reply(`You must wait ${minutes} more minutes before you can use this command again.`);
+				} else {
+					const seconds = Math.round(timeRemaining / 1000);
+					interaction.reply(`You must wait ${seconds} more seconds before you can use this command again.`);
+				}
+			} else {
+				await command.execute(interaction, pool);
+				client.cooldowns.push({ 
+					user: user.id, 
+					cmd: command.name,
+					endTime: Date.now() + command.cooldown
+				});
+				setTimeout(() => {
+					for(const i in client.cooldowns){
+						const obj = client.cooldowns[i];
+						if(obj.user == user.id && obj.cmd == command.name) client.cooldowns.splice(i,1);
+					}
+				}, command.cooldown);
+			}
+		} else {
+			await command.execute(interaction, pool);
+		}
+	} catch (error) {
+		console.error(error);
+		await interaction.reply({ 
+			content: "There was an error while executing this command!",
+			ephemeral: true 
+		});
+	}
+});
 
 
 const guildCreate = async (guild) => {
@@ -163,15 +219,16 @@ const guildCreate = async (guild) => {
 					'INSERT INTO `color_role` (color_id, guild_id, role_id) VALUES (?, ?, ?);',
 					[color._id, guild.id, newRole.id]
 				);
-				}
+			}
 		}
 
-		//add any new members to the DB
+		//add all members to the user DB
 		const members = await guild.members.fetch()
-		for await(const member of members){
+		members.forEach(async member => {
+			console.log(member.id);
 			await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
 				[member.id, member.displayName]);
-		}
+		});
 	} finally{
 		//release pool connection
 		conn.release();
@@ -182,24 +239,27 @@ const guildCreate = async (guild) => {
 }
 
 
+client.on('messageCreate', async message => {
+	if (message.partial) await message.fetch();
 
+	//ignore dms
+	if(message.channel.type == 'dm') return;
 
-client.on("interactionCreate", async interaction => {
-	if (!interaction.isCommand()) return;
+	//ignore self
+	if(message.member.id == client.user.id) return;
 
-	const command = client.commands.get(interaction.commandName);
+	const guild = message.guild;
+	const member = message.member;
 
-	if (!command) return;
-
-	try {
-		await command.execute(interaction);
-	} catch (error) {
-		console.error(error);
-		await interaction.reply({ 
-			content: "There was an error while executing this command!",
-			ephemeral: true 
-		});
+	const conn = await pool.getConnection();
+	try{
+		conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
+	} finally{
+		//release pool connection
+		conn.release();
 	}
+
+	if(message.content.toLowerCase().includes('uwu')) message.channel.send('UwU');
 });
 
 
@@ -343,6 +403,16 @@ client.on('messageReactionRemove', async (reaction, user) => {
 	}
 });
 
+client.on('guildMemberAdd', async member => {
+	const conn = await pool.getConnection();
+	try{
+		await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
+			[member.id, member.displayName]);
+	} finally{
+		//release pool connection
+		conn.release();
+	}
+});
 
 client.on('guildCreate', async guild => {
 	guildCreate(guild);
@@ -364,6 +434,41 @@ client.on('guildDelete', async guild => {
 
 
 
+async function activityLoop(){
+	const conn = await pool.getConnection();
+	try{
+		const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1;');
+		for await(const guildDB of guildsDB[0]){
+			const guild = await client.guilds.fetch(guildDB.guild_id);
+			const membersDB = await conn.query('SELECT * FROM `member` where `guild_id` = ?;', [guild.id]);
+			for await(const memberDB of membersDB[0]){
+				const member = await guild.members.fetch(memberDB.user_id);
+				
+				const prevActivityPoints = memberDB.activity_points;
+				let activityPoints = prevActivityPoints*decayRate;
+
+				if(memberDB.active){
+					activityPoints ++; 
+					if(activityPoints < memberMin) activityPoints = memberMin;
+				}
+
+				if(prevActivityPoints > lurkerMin && activityPoints < lurkerMin ) await member.roles.remove(guildDB.member_role_id);
+				if(prevActivityPoints < regularMin && activityPoints > regularMin) await member.roles.add(guildDB.regular_role_id);
+				if(prevActivityPoints < championMin && activityPoints > championMin) await member.roles.add(guildDB.champion_role_id);
+
+				await conn.query('UPDATE `member` SET `activity_points` = ?, `active` = 0 WHERE `guild_id` = ? AND `user_id` = ?;',
+					[activityPoints, guild.id, member.id]);
+			}
+		}
+	} finally{
+		//release pool connection
+		conn.release();
+	}
+
+	setTimeout(activityLoop, tickRate);
+}
+
+
 // Login to Discord with your client's token
 client.once("ready", async () => {
 	client.user.setPresence({
@@ -381,13 +486,15 @@ client.once("ready", async () => {
 			const guildDB = await conn.query('SELECT * FROM `guild` WHERE guild_id=?;',[guild.id]);
 			if(guildDB[0].length < 1){
 				guildCreate(guild);
+			} else if(guildDB[0][0].active == 0){
+				guildCreate(guild);
 			} else {
 				//guild exists in db but we still need to add any new members
-				const members = await guild.members.fetch()
-				for await (const member of members){
-					await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
+				const members = await guild.members.fetch();
+				members.forEach(member => {
+					conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
 						[member.id, member.displayName]);
-				}
+				});
 			}
 		});
 	} finally{
@@ -409,8 +516,8 @@ client.once("ready", async () => {
 	// 	//release pool connection
 	// 	conn2.release();
 	// }  
-
-
+	
+	setTimeout(activityLoop, tickRate);
 	
 	const startMsg = (stage == 'production') ? 'Aineko is ready!' : 'Aineko Beta is ready!';
 	console.log(startMsg);
