@@ -223,12 +223,13 @@ const guildCreate = async (guild) => {
 		}
 
 		//add all members to the user DB
-		const members = await guild.members.fetch()
-		members.forEach(async member => {
-			console.log(member.id);
+		let members = await guild.members.fetch();
+		members = [...members.values()];
+		for await (const member of members){
+			if(member.id == client.user.id) continue;
 			await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
 				[member.id, member.displayName]);
-		});
+		}
 	} finally{
 		//release pool connection
 		conn.release();
@@ -244,6 +245,8 @@ client.on('messageCreate', async message => {
 
 	//ignore dms
 	if(message.channel.type == 'dm') return;
+
+	if(!message.member) return;
 
 	//ignore self
 	if(message.member.id == client.user.id) return;
@@ -408,6 +411,21 @@ client.on('guildMemberAdd', async member => {
 	try{
 		await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
 			[member.id, member.displayName]);
+		const guildDB = await conn.query('SELECT `welcome_message` FROM `guild` WHERE `guild_id` = ?;', 
+			[member.guild.id]);
+		if(!guildDB[0][0].welcome_message) return;
+		await member.guild.systemChannel.send(`Welcome, ${member.toString()}. ${guildDB[0][0].welcome_message}`)
+	} finally{
+		//release pool connection
+		conn.release();
+	}
+});
+
+client.on('guildMemberRemove', async member => {
+	const conn = await pool.getConnection();
+	try{
+		await conn.query('DELETE FROM `member` WHERE `guild_id` = ? AND `user_id` = ?;',
+			[member.guild.id, member.id]);
 	} finally{
 		//release pool connection
 		conn.release();
@@ -490,34 +508,28 @@ client.once("ready", async () => {
 				guildCreate(guild);
 			} else {
 				//guild exists in db but we still need to add any new members
-				const members = await guild.members.fetch();
-				members.forEach(member => {
+				let members = await guild.members.fetch();
+				members = [...members.values()];
+				for await (const member of members){
+					if(member.id == client.user.id) continue;
 					conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
 						[member.id, member.displayName]);
-				});
+				}
 			}
 		});
 	} finally{
 		//release pool connection
 		conn.release();
 	}
-
-	// const guild = await client.guilds.fetch('825883828798881822'); 
-	// const channel = await guild.channels.fetch('865713507136045117');
-	// const msg = await channel.messages.fetch('983457946572828692');
-	// const emoji = msg.content.replace(/<|a|>|(:.*:)/g, '');
-	// console.log(emoji);
-
-	// const conn2 = await pool.getConnection();
-	// try{
-	// 	const colorDB = await conn2.query('SELECT * FROM `color`;');
-	// 	colorDB[0].forEach(color => msg.react(`<:${color.name}:${color.emoji_id}>`));
-	// } finally{
-	// 	//release pool connection
-	// 	conn2.release();
-	// }  
 	
+	// const guild = await client.guilds.fetch('515742178216116226');
+	// const channel = await guild.channels.fetch('910655271691505725');
+	// const msg = await channel.messages.fetch('984218420163801198');
+	// msg.edit(`React with 🔔 to recieve announcement pings.`);
+// 	msg.react('🎥');
+
 	setTimeout(activityLoop, tickRate);
+	//activityLoop();
 	
 	const startMsg = (stage == 'production') ? 'Aineko is ready!' : 'Aineko Beta is ready!';
 	console.log(startMsg);
