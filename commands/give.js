@@ -14,6 +14,7 @@ module.exports = {
 	async execute(interaction, pool) {
 		const member = interaction.member;
 		const amt = interaction.options.getString('amount');
+		if(!amt.match(/^[1-9]+/)) return interaction.reply("Amount must be a positive interger.");
 		const target = interaction.options.getMember('user');
 		if(target.id == interaction.client.user.id) return interaction.reply("You can't give Aineko scritch bucks.");
 		const conn = await pool.getConnection();

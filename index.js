@@ -299,7 +299,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
 				const colorRoleId = colorRoleDB[0][0].role_id;
 
 				//get existing member if any
-				const memberDB = await conn.query('SELECT `color_id` FROM `member` WHERE `guild_id` = ? AND `user_id` = ?;',
+				const memberDB = await conn.query('SELECT `color_id`, `activity_points` FROM `member` WHERE `guild_id` = ? AND `user_id` = ?;',
 					[guild.id, member.id]);
 
 				if(memberDB[0].length > 0){ //member exists
@@ -318,8 +318,14 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
 					//add color role to member
 					await member.roles.add(colorRoleId);
-					await conn.query('UPDATE `member` SET `color_id` = ? WHERE `guild_id` = ? AND `user_id` = ?;',
-						[color, guild.id, member.id]);
+
+					if(memberDB[0][0].activity_points < 4){
+						await conn.query('UPDATE `member` SET `color_id` = ?, `activity_points` = 4 WHERE `guild_id` = ? AND `user_id` = ?;',
+							[color, guild.id, member.id]);
+					} else {
+						await conn.query('UPDATE `member` SET `color_id` = ? WHERE `guild_id` = ? AND `user_id` = ?;',
+							[color, guild.id, member.id]);
+					}
 
 				} else { //member doesn't exist yet
 
@@ -470,9 +476,11 @@ async function activityLoop(){
 					if(activityPoints < memberMin) activityPoints = memberMin;
 				}
 
-				if(prevActivityPoints > lurkerMin && activityPoints < lurkerMin ) await member.roles.remove(guildDB.member_role_id);
-				if(prevActivityPoints < regularMin && activityPoints > regularMin) await member.roles.add(guildDB.regular_role_id);
-				if(prevActivityPoints < championMin && activityPoints > championMin) await member.roles.add(guildDB.champion_role_id);
+				if(member.roles.cache.has(guildDB.member_role_id) && activityPoints < lurkerMin ) await member.roles.remove(guildDB.member_role_id);
+				if(!member.roles.cache.has(guildDB.regular_role_id) && activityPoints > regularMin) await member.roles.add(guildDB.regular_role_id);
+				if(member.roles.cache.has(guildDB.regular_role_id) && activityPoints < regularMin) await member.roles.remove(guildDB.regular_role_id);
+				if(!member.roles.cache.has(guildDB.champion_role_id) && activityPoints > championMin) await member.roles.add(guildDB.champion_role_id);
+				if(member.roles.cache.has(guildDB.champion_role_id) && activityPoints < championMin) await member.roles.remove(guildDB.champion_role_id);
 
 				await conn.query('UPDATE `member` SET `activity_points` = ?, `active` = 0 WHERE `guild_id` = ? AND `user_id` = ?;',
 					[activityPoints, guild.id, member.id]);
@@ -526,7 +534,7 @@ client.once("ready", async () => {
 	// const channel = await guild.channels.fetch('910655271691505725');
 	// const msg = await channel.messages.fetch('984218420163801198');
 	// msg.edit(`React with 🔔 to recieve announcement pings.`);
-// 	msg.react('🎥');
+	// 	msg.react('🎥');
 
 	setTimeout(activityLoop, tickRate);
 	//activityLoop();
