@@ -2,7 +2,8 @@ require('dotenv').config();
 const fs = require("fs");
 const { Client, Collection, Intents } = require("discord.js");
 const mysql = require("mysql2/promise");
-const { stage, lurkerMin, memberMin, regularMin, championMin, decayRate, tickRate } = require("./config.json");
+const { stage, lurkerMin, memberMin, regularMin, championMin, decayRate, tickRate, facepalms } = require("./config.json");
+const { sleep, randInt } = require("./utils.js")
 
 // Create a new client instance
 const client = new Client({ 
@@ -154,7 +155,7 @@ const guildCreate = async (guild) => {
 				'UPDATE `guild` SET `active` = 1 WHERE `guild_id` = ?;',
 				[guild.id]
 			);
-		} else {
+		} else { //guild is not in DB
 			const championRole = await guild.roles.create({
 				name: "Champion",
 				permissions: "0",
@@ -174,10 +175,12 @@ const guildCreate = async (guild) => {
 				hoist: true,
 				position: hightestRole-3
 			});
+			//generate invite link
+			const invite = await guild.systemChannel.createInvite({ maxAge: 0, maxUses: 0 });
 			//add the guild to the database
 			await conn.query(
-				'INSERT IGNORE INTO `guild` (guild_id, name, member_role_id, regular_role_id, champion_role_id) VALUES (?, ?, ?, ?, ?);',
-				[guild.id, guild.name, memberRole.id, regularRole.id, championRole.id]
+				'INSERT IGNORE INTO `guild` (guild_id, name, member_role_id, regular_role_id, champion_role_id, invite) VALUES (?, ?, ?, ?, ?, ?);',
+				[guild.id, guild.name, memberRole.id, regularRole.id, championRole.id, invite.toString()]
 			);
 		}
 
@@ -243,20 +246,57 @@ const guildCreate = async (guild) => {
 client.on('messageCreate', async message => {
 	if (message.partial) await message.fetch();
 
-	//ignore dms
-	if(message.channel.type == 'dm') return;
+	//ignore non guild channel message
+	if(message.channel.type !== 'GUILD_TEXT') return;
 
-	if(!message.member) return;
-
-	//ignore self
-	if(message.member.id == client.user.id) return;
+	//ignore bots
+	if (message.author.bot) return;
 
 	const guild = message.guild;
 	const member = message.member;
+	const channel = message.channel;
 
 	const conn = await pool.getConnection();
 	try{
-		conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
+		await conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
+		const guildDB = await conn.query('SELECT `count_channel` FROM `guild` WHERE `guild_id` = ?;', [guild.id]);
+		if(channel.id == guildDB[0][0].count_channel){
+			await sleep(2000);
+			let messages = await channel.messages.fetch({ limit: 100 });
+			messages = [...messages.values()];
+			let failed = false;
+			let hundread = false;
+			for( let i = 1; i < messages.length; i++){
+				const prevNum = Number(messages[i-1].content);
+				const num = Number(messages[i].content);
+				if(prevNum == 100) hundread = true;
+				if(isNaN(prevNum) || isNaN(num)|| prevNum != num+1){
+					failed = true;
+					break;
+				}
+				if(num == 0) break;
+				if(messages[i].author.id == messages[i+1].author.id || messages[i].author.id == messages[i+2].author.id ){
+					failed = true;
+					break;
+				}
+			}
+			if(failed){
+				const failImg = facepalms[randInt(facepalms.length-1)];
+				await channel.send({files: [failImg]});
+				channel.send('0');
+			} else if (hundread){
+				const players = [];
+				let messages = await channel.messages.fetch({ limit: 100 });
+				messages = [...messages.values()];
+				for (const msg of messages){
+					if(players.includes(msg.author.id)) continue;
+					conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + 100 WHERE `user_id` = ?;', [msg.author.id]);
+					players.push(msg.author.id);
+				}
+				await channel.send({content: 'Great job! You all get ฅ100.', files: [`images/success-kid.gif`] });
+				channel.send('0');
+			}
+		}
 	} finally{
 		//release pool connection
 		conn.release();
@@ -510,9 +550,8 @@ client.once("ready", async () => {
 		//set up any new guilds that were
 		client.guilds.cache.forEach(async guild => {
 			const guildDB = await conn.query('SELECT * FROM `guild` WHERE guild_id=?;',[guild.id]);
-			if(guildDB[0].length < 1){
-				guildCreate(guild);
-			} else if(guildDB[0][0].active == 0){
+			if(guildDB[0].length < 1) return guildCreate(guild);
+			if(guildDB[0][0].active == 0){
 				guildCreate(guild);
 			} else {
 				//guild exists in db but we still need to add any new members
