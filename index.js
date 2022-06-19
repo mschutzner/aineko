@@ -264,25 +264,34 @@ client.on('messageCreate', async message => {
 			await sleep(2000);
 			let messages = await channel.messages.fetch({ limit: 100 });
 			messages = [...messages.values()];
-			let failed = false;
+			let wrongNum = false;
+			let wrongMem = false;
 			let hundread = false;
 			for( let i = 1; i < messages.length; i++){
 				const prevNum = Number(messages[i-1].content);
 				const num = Number(messages[i].content);
 				if(prevNum == 100) hundread = true;
 				if(isNaN(prevNum) || isNaN(num)|| prevNum != num+1){
-					failed = true;
+					wrongNum = true;
 					break;
 				}
 				if(num == 0) break;
-				if(messages[i].author.id == messages[i+1].author.id || messages[i].author.id == messages[i+2].author.id ){
-					failed = true;
+				if(messages[i-1].author.id == messages[i].author.id){
+					wrongMem = true;
+					break;
+				}
+				if(messages[i+1] && messages[i-1].author.id == messages[i+1].author.id){
+					wrongMem = true;
 					break;
 				}
 			}
-			if(failed){
+			if(wrongNum){
 				const failImg = facepalms[randInt(facepalms.length-1)];
-				await channel.send({files: [failImg]});
+				await channel.send({content: "You must reply with the next number!",files: [failImg]});
+				channel.send('0');
+			} else if (wrongMem){
+				const failImg = facepalms[randInt(facepalms.length-1)];
+				await channel.send({content: "You must wait two members between messages! Tupperbox messages always counts as the same member.",files: [failImg]});
 				channel.send('0');
 			} else if (hundread){
 				const players = [];
@@ -293,7 +302,7 @@ client.on('messageCreate', async message => {
 					conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + 100 WHERE `user_id` = ?;', [msg.author.id]);
 					players.push(msg.author.id);
 				}
-				await channel.send({content: 'Great job! You all get ฅ100.', files: [`images/success-kid.gif`] });
+				await channel.send({content: 'Great job! You all get ฅ100. New game starting now. Messages must be the next number and you must wait two members between messages. Tupperbox messages always counts as the same member.', files: [`images/success-kid.gif`] });
 				channel.send('0');
 			}
 		}

@@ -3,7 +3,7 @@
 	"lurkerMin": 0.1,
   "memberMin": 4,
   "regularMin": 32,
-  "championMin": 256,
+  "championMin": 128,
 	"decayRate": 0.999,
 	"tickRate": 300000,
   "facepalms": [
