@@ -11,7 +11,7 @@ module.exports = {
         const players = [interaction.member]
 
         const filter1 = msg => msg.content.toLowerCase() == "join" && !players.some(player => player.id == msg.member.id)
-        const collector1 = interaction.channel.createMessageCollector({ filter: filter1, time: 30000, max: 3 });
+        const collector1 = channel.createMessageCollector({ filter: filter1, time: 30000, max: 3 });
 
         collector1.on('collect', msg => {
             channel.send(`${msg.member.displayName} has joined the game!`)
@@ -19,7 +19,7 @@ module.exports = {
         });
 
         const filter2 = msg => msg.content.toLowerCase() == "start" && players.some(player => player.id == msg.member.id)
-        const collector2 = interaction.channel.createMessageCollector({ filter: filter2, time: 30000, max: 1 });
+        const collector2 = channel.createMessageCollector({ filter: filter2, time: 30000, max: 1 });
 
         collector2.on('collect', () => {
             collector1.stop();
@@ -30,5 +30,6 @@ module.exports = {
                 await channel.send(player.displayName);
             }
         });
+        //hello
 	},
 }

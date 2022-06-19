@@ -234,7 +234,7 @@ const guildCreate = async (guild) => {
 				[member.id, member.displayName]);
 		}
 	} finally{
-		//release pool connection
+		//release pool connectio n
 		conn.release();
 	}
 
