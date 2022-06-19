@@ -30,6 +30,5 @@ module.exports = {
                 await channel.send(player.displayName);
             }
         });
-        //hello
 	},
 }
