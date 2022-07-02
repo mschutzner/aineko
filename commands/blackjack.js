@@ -1,34 +1,176 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
+const { MessageAttachment } = require('discord.js');
+const { sleep, shuffle } = require("../utils.js");
+const { createCanvas, loadImage, Image } = require('canvas');
+const axios = require('axios');
+
+function addCards(hand){
+    let total = 0;
+    let aces = 0;
+
+    for(const card of hand){
+        if(card[1] == 1) aces++;
+    }
+
+    for(const card of hand){
+        switch(card[1]){
+            case 1:
+                total += 11;
+            break;
+            case 11:
+            case 12:
+            case 13:
+                total += 10;
+            break;
+            default:
+                total += value;
+            break;
+        }
+    }
+    if(total > 21 && aces){
+        for(let i = 0; i < aces; i++){
+            total -= 10;
+            if(total <= 21) break;
+        }
+    }
+    return total;
+}
 
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('blackjack')
-		.setDescription('Starts a game of blackjack.'),
+		.setDescription('Starts a game of blackjack.')
+		.addIntegerOption(option =>
+			option.setName('wager')
+				.setDescription("The amount of scritch bucks you'd like to wager.")
+				.setRequired(true)),
 	async execute(interaction, pool) {
-        await interaction.reply(`${interaction.member.displayName} has started a game of blackjack! Reply with join to join in. The game starts in 30 seconds or when a player replies with "start".`);
         const channel = interaction.channel;
 
-        const players = [interaction.member]
+        const wager = interaction.options.getInteger('wager');
 
-        const filter1 = msg => msg.content.toLowerCase() == "join" && !players.some(player => player.id == msg.member.id)
-        const collector1 = channel.createMessageCollector({ filter: filter1, time: 30000, max: 3 });
+        const conn = await pool.getConnection();
+		try{
+            const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [interaction.member.id]);
 
-        collector1.on('collect', msg => {
-            channel.send(`${msg.member.displayName} has joined the game!`)
-            players.push(msg.member);
-        });
+            if(wager > userDB[0][0].scritch_bucks) return interaction.reply({content: "You don't have enough scritch bucks.", ephemeral: true});
 
-        const filter2 = msg => msg.content.toLowerCase() == "start" && players.some(player => player.id == msg.member.id)
-        const collector2 = channel.createMessageCollector({ filter: filter2, time: 30000, max: 1 });
-
-        collector2.on('collect', () => {
-            collector1.stop();
-        });
-
-        collector1.on('end', async collected => {
-            for await(const player of players){
-                await channel.send(player.displayName);
+            const players = [interaction.member]
+            players[0].wager = wager;
+            await interaction.reply(`${interaction.member.displayName} has started a game of blackjack with a wager of ฅ${wager}! Reply with join followed by the amount of SB you'd like to wager. The game starts in one minute or when a player replies with "start".`);
+    
+            let deck = [];
+            let dealerHand = [];
+            for(let i = 0; i < 6; i++){
+                for(let j = 0; j < 4; j++){
+                    for(let k = 1; k < 14; k++){
+                        deck.push([j,k]);
+                    }
+                }
             }
-        });
+            deck = shuffle(deck);
+    
+            const filter1 = msg => msg.content.match(/^join ฅ?[1-9]+[0-9]*/i) && !players.some(player => player.id == msg.member.id)
+            const collector1 = channel.createMessageCollector({ filter: filter1, time: 60000});
+    
+            collector1.on('collect', async msg => {
+                const regex = msg.content.match(/^join ฅ?([1-9]+[0-9]*)/i);
+                const userDB2 = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [msg.member.id]);
+                if(regex[1] > userDB2[0][0].scritch_bucks) return channel.send("You don't have enough scritch bucks.");
+                msg.member.wager = regex[1];
+                players.push(msg.member);
+                if(players.length >= 3) collector1.stop();
+                channel.send(`${msg.member.displayName} has joined the game with a wager of ฅ${regex[1]}!`);
+            });
+    
+            const filter2 = msg => msg.content.toLowerCase() == "start" && players.some(player => player.id == msg.member.id)
+            const collector2 = channel.createMessageCollector({ filter: filter2, time: 30000, max: 1 });
+    
+            collector2.on('collect', () => {
+                collector1.stop();
+            });
+    
+            collector1.on('end', async collected => {
+                await sleep(500);
+                for await (const player of players){
+                    await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [player.wager, player.id]);
+                    player.hand = [];
+                    player.hand.push(deck.splice(0, 1)[0]);
+                }
+                dealerHand.push(deck.splice(0, 1)[0]);
+                for (const player of players){
+                    player.hand.push(deck.splice(0, 1)[0]);
+                    player.value = addCards(player.hand);
+                }
+                dealerHand.push(deck.splice(0, 1)[0]);
+                
+                const canvas = createCanvas(720, 540);
+                const ctx = canvas.getContext('2d');
+                ctx.save();
+
+                const tableImg = await loadImage("images/blackjack/table.png");
+                const cardSheet = await loadImage("images/blackjack/card-sheet.png");
+                const cardBack = await loadImage("images/blackjack/card-back.png");
+                const arrow = await loadImage("images/blackjack/arrow.png");
+
+                ctx.drawImage(tableImg, 0, 0);
+
+                ctx.beginPath();
+                ctx.arc(285, 55, 40, 0, Math.PI * 2, true);
+                ctx.closePath();
+                ctx.clip();
+
+                const dealerAvatarResponse = await axios.get(interaction.client.user.displayAvatarURL({ format: 'png' }), { responseType: 'arraybuffer' });
+                const dealerAvatar = new Image();
+                dealerAvatar.src = dealerAvatarResponse.data;
+                ctx.drawImage(dealerAvatar, 245, 15, 80, 80);
+                
+                ctx.restore();
+                ctx.drawImage(cardSheet, (dealerHand[0][1]-1)*64, dealerHand[0][0]*100, 64, 100, 338, 10, 64, 100);
+                ctx.drawImage(cardBack, 352, 10);
+
+
+                players.reverse();
+                for(let i = 0; i < players.length; i++){
+                    players[i].x = (i+1)*720/(players.length+1)-120;
+                }
+                players.reverse();
+
+                for await (const player of players){
+                    ctx.save();
+
+                    ctx.beginPath();
+                    ctx.arc(player.x+45, 350, 40, 0, Math.PI * 2, true);
+                    ctx.closePath();
+                    ctx.clip();
+                    
+                    const avatarResponse = await axios.get(player.user.displayAvatarURL({ format: 'png' }), { responseType: 'arraybuffer' });
+                    const avatar = new Image();
+                    avatar.src = avatarResponse.data;
+
+                    ctx.drawImage(avatar, player.x+5, 310, 80, 80);
+
+                    ctx.restore();
+
+                    ctx.drawImage(cardSheet, (player.hand[0][1]-1)*64, player.hand[0][0]*100, 64, 100, player.x+98, 310, 64, 100);
+                    ctx.drawImage(cardSheet, (player.hand[1][1]-1)*64, player.hand[1][0]*100, 64, 100, player.x+112, 310, 64, 100);
+                }
+
+                for await(const player of players){
+                    ctx.drawImage(tableImg, 0, 260, 720, 40, 0, 260, 720, 40);
+                    ctx.drawImage(arrow, player.x+25, 260);
+                    // while(player.value < 21){
+                    //     const filter = m => m.author.id === player.id;
+                    //     channel.awaitMessages(filter, {time: 30000});
+                    // }
+                }
+
+                const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+
+                await channel.send({ files: [attachment] });
+            });
+		} finally{
+			conn.release();
+		}
 	},
 }

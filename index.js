@@ -3,7 +3,7 @@ const fs = require("fs");
 const { Client, Collection, Intents } = require("discord.js");
 const mysql = require("mysql2/promise");
 const { stage, lurkerMin, memberMin, regularMin, championMin, decayRate, tickRate, facepalms } = require("./config.json");
-const { sleep, randInt } = require("./utils.js")
+const { sleep, randInt } = require("./utils.js");
 
 // Create a new client instance
 const client = new Client({ 
@@ -64,10 +64,10 @@ client.on("interactionCreate", async interaction => {
 				const timeRemaining = cooldown.endTime - Date.now();
 				if(timeRemaining > 60000){
 					const minutes = Math.round(timeRemaining / 60000);
-					interaction.reply(`You must wait ${minutes} more minutes before you can use this command again.`);
+					interaction.reply({content: `You must wait ${minutes} more minutes before you can use this command again.`, ephemeral: true});
 				} else {
 					const seconds = Math.round(timeRemaining / 1000);
-					interaction.reply(`You must wait ${seconds} more seconds before you can use this command again.`);
+					interaction.reply({content: `You must wait ${seconds} more seconds before you can use this command again.`, ephemeral: true});
 				}
 			} else {
 				await command.execute(interaction, pool);
@@ -287,11 +287,11 @@ client.on('messageCreate', async message => {
 			}
 			if(wrongNum){
 				const failImg = facepalms[randInt(facepalms.length-1)];
-				await channel.send({content: "You must reply with the next number!",files: [failImg]});
+				await channel.send({content: "You must reply with the next number! New game starting now. Messages must be the next number and you must wait two members between messages. Tupperbox messages always counts as the same member.",files: [failImg]});
 				channel.send('0');
 			} else if (wrongMem){
 				const failImg = facepalms[randInt(facepalms.length-1)];
-				await channel.send({content: "You must wait two members between messages! Tupperbox messages always counts as the same member.",files: [failImg]});
+				await channel.send({content: "You must wait two members between messages! New game starting now. Messages must be the next number and you must wait two members between messages. Tupperbox messages always counts as the same member.",files: [failImg]});
 				channel.send('0');
 			} else if (hundread){
 				const players = [];
@@ -299,10 +299,10 @@ client.on('messageCreate', async message => {
 				messages = [...messages.values()];
 				for (const msg of messages){
 					if(players.includes(msg.author.id)) continue;
-					conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + 100 WHERE `user_id` = ?;', [msg.author.id]);
+					conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + 200 WHERE `user_id` = ?;', [msg.author.id]);
 					players.push(msg.author.id);
 				}
-				await channel.send({content: 'Great job! You all get ฅ100. New game starting now. Messages must be the next number and you must wait two members between messages. Tupperbox messages always counts as the same member.', files: [`images/success-kid.gif`] });
+				await channel.send({content: 'Great job! You all get ฅ200. New game starting now. Messages must be the next number and you must wait two members between messages. Tupperbox messages always counts as the same member.', files: [`images/success-kid.gif`] });
 				channel.send('0');
 			}
 		}
@@ -543,6 +543,38 @@ async function activityLoop(){
 	setTimeout(activityLoop, tickRate);
 }
 
+async function questionLoop(){
+	let questionTime = new Date();
+	if (questionTime.getHours() >= 14) questionTime.setDate(questionTime.getDate() + 1);
+	questionTime.setHours(14, 0, 0, 0);
+	questionTime = questionTime.getTime();
+
+	const curTime = new Date().getTime();
+
+	setTimeout(async () => {
+		const conn = await pool.getConnection();
+		try{
+			const sqlDate = new Date().toISOString().slice(0, 10);
+			const questionDB = await conn.query('SELECT * FROM `question` WHERE `date` = ?;', [sqlDate]);
+
+			if(questionDB[0].length < 1) return console.error("No question of the day!");
+
+			const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1;');
+			for await(const guildDB of guildsDB[0]){
+				if(!guildDB.question_channel) return;
+				const guild = await client.guilds.fetch(guildDB.guild_id);
+				const channel = await guild.channels.fetch(guildDB.question_channel);
+				channel.send(`It's now <t:${questionTime/1000}> and it's time for the **question of the day!** \`\`\`${questionDB[0][0].question}\`\`\``);
+			}
+		} finally{
+			//release pool connection
+			conn.release();
+		}
+
+		questionLoop();
+	}, questionTime - curTime);
+}
+
 
 // Login to Discord with your client's token
 client.once("ready", async () => {
@@ -587,6 +619,8 @@ client.once("ready", async () => {
 	setTimeout(activityLoop, tickRate);
 	//activityLoop();
 	
+	questionLoop();
+
 	const startMsg = (stage == 'production') ? 'Aineko is ready!' : 'Aineko Beta is ready!';
 	console.log(startMsg);
 });

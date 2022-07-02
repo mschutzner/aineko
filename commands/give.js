@@ -7,21 +7,20 @@ module.exports = {
         .addUserOption(option => option.setName('user')
             .setDescription('The user to be painted.')
 			.setRequired(true))
-		.addStringOption(option =>
+		.addIntegerOption(option =>
 			option.setName('amount')
 				.setDescription('The amount of scritch bucks to be given.')
 				.setRequired(true)),
 	async execute(interaction, pool) {
 		const member = interaction.member;
-		const amt = interaction.options.getString('amount');
-		if(!amt.match(/^[1-9]+/)) return interaction.reply("Amount must be a positive interger.");
+		const amt = interaction.options.getInteger('amount');
 		const target = interaction.options.getMember('user');
 		if(target.id == interaction.client.user.id) return interaction.reply("You can't give Aineko scritch bucks.");
 		const conn = await pool.getConnection();
 		try{
 			const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;',
 				[member.id]);
-			if(userDB[0][0].scritch_bucks < amt) return interaction.reply("You don't have enough scritch bucks.");
+			if(userDB[0][0].scritch_bucks < amt) return interaction.reply({content: "You don't have enough scritch bucks.", ephemeral: true});
 			await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;',
 				[amt, member.id]);
 			await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;',
