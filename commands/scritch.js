@@ -19,8 +19,10 @@ module.exports = {
 	cooldown: 180000,
 	async execute(interaction, pool) {
 		const client = interaction.client;
+		
 		const rewardIndex = randInt(rewardsTable.length-1);
 		const reward = rewardsTable[rewardIndex];
+
 		const conn = await pool.getConnection();
 		try{
 			await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;',

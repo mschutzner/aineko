@@ -1,17 +1,6 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { randInt } = require('../utils.js');
 
-const rewardsTable = [
-	{ msg: 'purr-rrr', amt: 1},
-	{ msg: 'Good human.', amt: 1},
-	{ msg: 'Thank you.', amt: 1},
-	{ msg: 'UwU', amt: 1},
-	{ msg: 'mmmhm ty', amt: 2},
-	{ msg: 'ฅ^•ﻌ•^ฅ', amt: 4},
-	{ msg: 'Such good. Very wow.', amt: 8},
-	{ msg: "mmhmm. I'm feeling generous.", amt: 32},
-];
-
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('highscores')
