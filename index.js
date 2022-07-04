@@ -49,14 +49,14 @@ client.on("interactionCreate", async interaction => {
 	const member = interaction.member;
 
 	const conn = await pool.getConnection();
-	try{
-		conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
-	} finally{
-		//release pool connection
-		conn.release();
-	}
-
 	try {
+		if(command.game){
+			const guildDB = await conn.query('SELECT `online` FROM `guild` WHERE `guild_id` = ?;', [guild.id]);
+			if(guildDB[0].length == 0 || !guildDB[0][0].online) return interaction.reply({ 
+				content: "The bot is currently down for maintenance.",
+				ephemeral: true 
+			}); 
+		}
 		if(command.cooldown){
 			const user = interaction.user;
 			const cooldown = client.cooldowns.find(c => c.user == user.id && c.cmd == command.name);
@@ -70,6 +70,7 @@ client.on("interactionCreate", async interaction => {
 					interaction.reply({content: `You must wait ${seconds} more seconds before you can use this command again.`, ephemeral: true});
 				}
 			} else {
+				await conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
 				await command.execute(interaction, pool);
 				client.cooldowns.push({ 
 					user: user.id, 
@@ -84,6 +85,7 @@ client.on("interactionCreate", async interaction => {
 				}, command.cooldown);
 			}
 		} else {
+			await conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
 			await command.execute(interaction, pool);
 		}
 	} catch (error) {
@@ -92,6 +94,9 @@ client.on("interactionCreate", async interaction => {
 			content: "There was an error while executing this command!",
 			ephemeral: true 
 		});
+	} finally{
+		//release pool connection
+		conn.release();
 	}
 });
 

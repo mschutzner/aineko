@@ -23,7 +23,7 @@ function addCards(hand){
                 total += 10;
             break;
             default:
-                total += value;
+                total += card[1];
             break;
         }
     }
@@ -36,6 +36,10 @@ function addCards(hand){
     return total;
 }
 
+async function turn(player){
+    
+}
+
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('blackjack')
@@ -44,6 +48,7 @@ module.exports = {
 			option.setName('wager')
 				.setDescription("The amount of scritch bucks you'd like to wager.")
 				.setRequired(true)),
+    game: true,
 	async execute(interaction, pool) {
         const channel = interaction.channel;
 
@@ -51,6 +56,14 @@ module.exports = {
 
         const conn = await pool.getConnection();
 		try{
+            const gameDB = await conn.query('SELECT `game` FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+            if(gameDB[0].length) return interaction.reply({ 
+                content: `There is already a game of ${gameDB[0][0].game} running in this channel.`,
+                ephemeral: true 
+            });
+            
+			await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, ?);', [channel.id, "blackjack"]);
+
             const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [interaction.member.id]);
 
             if(wager > userDB[0][0].scritch_bucks) return interaction.reply({content: "You don't have enough scritch bucks.", ephemeral: true});
@@ -70,27 +83,27 @@ module.exports = {
             }
             deck = shuffle(deck);
     
-            const filter1 = msg => msg.content.match(/^join ฅ?[1-9]+[0-9]*/i) && !players.some(player => player.id == msg.member.id)
-            const collector1 = channel.createMessageCollector({ filter: filter1, time: 60000});
+            const joinFilter = msg => msg.content.match(/^join ฅ?[1-9]+[0-9]*/i) && !players.some(player => player.id == msg.member.id)
+            const joinCollector = channel.createMessageCollector({ filter: joinFilter, time: 60000});
     
-            collector1.on('collect', async msg => {
+            joinCollector.on('collect', async msg => {
                 const regex = msg.content.match(/^join ฅ?([1-9]+[0-9]*)/i);
                 const userDB2 = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [msg.member.id]);
                 if(regex[1] > userDB2[0][0].scritch_bucks) return channel.send("You don't have enough scritch bucks.");
                 msg.member.wager = regex[1];
                 players.push(msg.member);
-                if(players.length >= 3) collector1.stop();
+                if(players.length >= 3) joinCollector.stop();
                 channel.send(`${msg.member.displayName} has joined the game with a wager of ฅ${regex[1]}!`);
             });
     
-            const filter2 = msg => msg.content.toLowerCase() == "start" && players.some(player => player.id == msg.member.id)
-            const collector2 = channel.createMessageCollector({ filter: filter2, time: 30000, max: 1 });
+            const startFilter = msg => msg.content.toLowerCase() == "start" && players.some(player => player.id == msg.member.id)
+            const startCollector = channel.createMessageCollector({ filter: startFilter, time: 30000, max: 1 });
     
-            collector2.on('collect', () => {
-                collector1.stop();
+            startCollector.on('collect', () => {
+                joinCollector.stop();
             });
     
-            collector1.on('end', async collected => {
+            joinCollector.on('end', async collected => {
                 await sleep(500);
                 for await (const player of players){
                     await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [player.wager, player.id]);
@@ -155,19 +168,18 @@ module.exports = {
                     ctx.drawImage(cardSheet, (player.hand[0][1]-1)*64, player.hand[0][0]*100, 64, 100, player.x+98, 310, 64, 100);
                     ctx.drawImage(cardSheet, (player.hand[1][1]-1)*64, player.hand[1][0]*100, 64, 100, player.x+112, 310, 64, 100);
                 }
-
+                
                 for await(const player of players){
                     ctx.drawImage(tableImg, 0, 260, 720, 40, 0, 260, 720, 40);
                     ctx.drawImage(arrow, player.x+25, 260);
-                    // while(player.value < 21){
-                    //     const filter = m => m.author.id === player.id;
-                    //     channel.awaitMessages(filter, {time: 30000});
-                    // }
+
+                    const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                    await channel.send({ content: `It is ${player.displayName}'s turn.`, files: [attachment] });
+
+                    await turn(player);
                 }
 
-                const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
-
-                await channel.send({ files: [attachment] });
+			    await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
             });
 		} finally{
 			conn.release();
