@@ -284,14 +284,12 @@ module.exports = {
                         player.hand = [];
                         player.hand.push(deck.splice(0, 1)[0]);
                     }
-                    //dealerHand.push(deck.splice(0, 1)[0]);
-                    dealerHand.push([0, 1]);
+                    dealerHand.push(deck.splice(0, 1)[0]);
                     for (const player of players){
                         player.hand.push(deck.splice(0, 1)[0]);
                         player.value = addCards(player.hand);
                     }
-                    //dealerHand.push(deck.splice(0, 1)[0]);
-                    dealerHand.push([0, 11]);
+                    dealerHand.push(deck.splice(0, 1)[0]);
                     
                     const canvas = createCanvas(720, 540);
                     const ctx = canvas.getContext('2d');
