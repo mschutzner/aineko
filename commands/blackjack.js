@@ -36,9 +36,181 @@ function addCards(hand){
     return total;
 }
 
-async function turn(player){
+async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
+    if(player.hand.length == 2){
+        const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [player.id]);
+        if(userDB[0][0].scritch_bucks >= player.wager){
+            const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+            await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit, fold, double down, or surrender.`, files: [attachment] });
+            
+            const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|surrender|double down|/i);
+            const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
+            
+            if(collected.first() && collected.first().content.toLowerCase() != 'fold'){
+                if (collected.first().content.toLowerCase() == 'surrender') {
+                    player.surrendered = true;
+                    player.wager = Math.ceil(player.wager/2);
+                    const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                    await channel.send({ content: `${player.displayName} has surrendered.`, files: [attachment2] });
+                    await sleep(2000);
+                    const obj = { deck, player};
+                    return obj;
+                } else if (collected.first().content.toLowerCase() == 'double down'){
+                    player.wager *= 2;
     
+                    await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [player.wager, player.id]);
+    
+                    player.hand.push(deck.splice(0, 1)[0]);
+        
+                    ctx.drawImage(cardSheet, (player.hand[player.hand.length-1][1]-1)*64, player.hand[player.hand.length-1][0]*100, 64, 100, player.x+92+14*(player.hand.length-1), 415-25*(player.hand.length-1), 64, 100);
+            
+                    player.value = addCards(player.hand);
+                    if(player.value == 21){
+                        const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                        await channel.send({ content: `${player.displayName} has doubled down and got blackjack!`, files: [attachment2] });
+                        await sleep(3000);
+                        const obj = { deck, player};
+                        return obj;
+                    } else if(player.value > 21){
+                        player.busted = true;
+                        const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                        await channel.send({ content: `${player.displayName} has doubled down and busted.`, files: [attachment2] });
+                        await sleep(3000);
+                        const obj = { deck, player};
+                        return obj;
+                    } else {
+                        const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                        await channel.send({ content: `${player.displayName} has doubled down.`, files: [attachment2] });
+                        await sleep(3000);
+                        const obj = { deck, player};
+                        return obj;
+                    }
+                } else {
+                    player.hand.push(deck.splice(0, 1)[0]);
+        
+                    ctx.drawImage(cardSheet, (player.hand[player.hand.length-1][1]-1)*64, player.hand[player.hand.length-1][0]*100, 64, 100, player.x+92+14*(player.hand.length-1), 415-25*(player.hand.length-1), 64, 100);
+    
+                    player.value = addCards(player.hand);
+                    if(player.value == 21){
+                        const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                        await channel.send({ content: `${player.displayName} got blackjack!`, files: [attachment2] });
+                        await sleep(3000);
+                        const obj = { deck, player};
+                        return obj;
+                    } else if(player.value > 21){
+                        player.busted = true;
+                        const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                        await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
+                        await sleep(3000);
+                        const obj = { deck, player};
+                        return obj;
+                    } else {
+                        const obj = await turn(deck, channel, ctx, canvas, cardSheet, player, conn);
+                        return obj;
+                    }
+                }
+            } else {
+                await channel.send(`${player.displayName} has folded.`);
+                const obj = { deck, player};
+                return obj;
+            }
+        } else {
+            const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+            await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit, fold, or surrender.`, files: [attachment] });
+            
+            const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|fold|surrender/i);
+            const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
+            
+            if(collected.first() && collected.first().content.toLowerCase() != 'fold'){
+                if (collected.first().content.toLowerCase() == 'surrender') {
+                    player.surrendered = true;
+                    const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                    await channel.send({ content: `${player.displayName} has surrendered.`, files: [attachment2] });
+                    await sleep(2000);
+                    const obj = { deck, player};
+                    return obj;
+                } else {
+                    player.hand.push(deck.splice(0, 1)[0]);
+        
+                    ctx.drawImage(cardSheet, (player.hand[player.hand.length-1][1]-1)*64, player.hand[player.hand.length-1][0]*100, 64, 100, player.x+92+14*(player.hand.length-1), 415-25*(player.hand.length-1), 64, 100);
+    
+                    player.value = addCards(player.hand);
+                    if(player.value == 21){
+                        const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                        await channel.send({ content: `${player.displayName} got blackjack!`, files: [attachment2] });
+                        await sleep(3000);
+                        const obj = { deck, player};
+                        return obj;
+                    } else if(player.value > 21){
+                        player.busted = true;
+                        const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                        await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
+                        await sleep(3000);
+                        const obj = { deck, player};
+                        return obj;
+                    } else {
+                        const obj = await turn(deck, channel, ctx, canvas, cardSheet, player, conn);
+                        return obj;
+                    }
+                }
+            } else {
+                await channel.send(`${player.displayName} has folded.`);
+                const obj = { deck, player};
+                return obj;
+            }
+        }
+    } else {
+        const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+        await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit or fold.`, files: [attachment] });
+        
+        const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|fold/i);
+    
+        const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
+        if(collected.first() && collected.first().content.toLowerCase() == 'hit'){
+            player.hand.push(deck.splice(0, 1)[0]);
+    
+            ctx.drawImage(cardSheet, (player.hand[player.hand.length-1][1]-1)*64, player.hand[player.hand.length-1][0]*100, 64, 100, player.x+92+14*(player.hand.length-1), 415-25*(player.hand.length-1), 64, 100);
+    
+            player.value = addCards(player.hand);
+            if(player.value == 21){
+                const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                await channel.send({ content: `${player.displayName} got blackjack!`, files: [attachment2] });
+                await sleep(3000);
+                const obj = { deck, player};
+                return obj;
+            } else if(player.value > 21){
+                player.busted = true;
+                const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
+                await sleep(3000);
+                const obj = { deck, player};
+                return obj;
+            } else {
+                const obj = await turn(deck, channel, ctx, canvas, cardSheet, player, conn);
+                return obj;
+            }
+        } else {
+            await channel.send(`${player.displayName} has folded.`);
+            const obj = { deck, player};
+            return obj;
+        }
+    }
+
 }
+
+async function dealerTurn(deck, channel, ctx, cardSheet, dealerHand){
+    dealerHand.push(deck.splice(0, 1)[0]);
+    
+    ctx.drawImage(cardSheet, (dealerHand[dealerHand.length-1][1]-1)*64, dealerHand[dealerHand.length-1][0]*100, 64, 100, 338+14*(dealerHand.length-1), 10, 64, 100);
+
+    const dealerValue = addCards(dealerHand);
+    if(dealerValue < 17){
+        deck = await dealerTurn(deck, channel, ctx, cardSheet, dealerHand);
+    }
+    
+    return deck;
+}
+
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -70,10 +242,9 @@ module.exports = {
 
             const players = [interaction.member]
             players[0].wager = wager;
-            await interaction.reply(`${interaction.member.displayName} has started a game of blackjack with a wager of ฅ${wager}! Reply with join followed by the amount of SB you'd like to wager. The game starts in one minute or when a player replies with "start".`);
+            await interaction.reply(`${interaction.member.displayName} has started a game of blackjack with a wager of ฅ${wager}! Reply with join followed by the amount of scritch bucks you'd like to wager. The game starts in one minute or when a player replies with "start".`);
     
             let deck = [];
-            let dealerHand = [];
             for(let i = 0; i < 6; i++){
                 for(let j = 0; j < 4; j++){
                     for(let k = 1; k < 14; k++){
@@ -104,82 +275,191 @@ module.exports = {
             });
     
             joinCollector.on('end', async collected => {
-                await sleep(500);
-                for await (const player of players){
-                    await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [player.wager, player.id]);
-                    player.hand = [];
-                    player.hand.push(deck.splice(0, 1)[0]);
-                }
-                dealerHand.push(deck.splice(0, 1)[0]);
-                for (const player of players){
-                    player.hand.push(deck.splice(0, 1)[0]);
-                    player.value = addCards(player.hand);
-                }
-                dealerHand.push(deck.splice(0, 1)[0]);
-                
-                const canvas = createCanvas(720, 540);
-                const ctx = canvas.getContext('2d');
-                ctx.save();
+                try{
+                    await sleep(500);
 
-                const tableImg = await loadImage("images/blackjack/table.png");
-                const cardSheet = await loadImage("images/blackjack/card-sheet.png");
-                const cardBack = await loadImage("images/blackjack/card-back.png");
-                const arrow = await loadImage("images/blackjack/arrow.png");
-
-                ctx.drawImage(tableImg, 0, 0);
-
-                ctx.beginPath();
-                ctx.arc(285, 55, 40, 0, Math.PI * 2, true);
-                ctx.closePath();
-                ctx.clip();
-
-                const dealerAvatarResponse = await axios.get(interaction.client.user.displayAvatarURL({ format: 'png' }), { responseType: 'arraybuffer' });
-                const dealerAvatar = new Image();
-                dealerAvatar.src = dealerAvatarResponse.data;
-                ctx.drawImage(dealerAvatar, 245, 15, 80, 80);
-                
-                ctx.restore();
-                ctx.drawImage(cardSheet, (dealerHand[0][1]-1)*64, dealerHand[0][0]*100, 64, 100, 338, 10, 64, 100);
-                ctx.drawImage(cardBack, 352, 10);
-
-
-                players.reverse();
-                for(let i = 0; i < players.length; i++){
-                    players[i].x = (i+1)*720/(players.length+1)-120;
-                }
-                players.reverse();
-
-                for await (const player of players){
+                    let dealerHand = [];
+                    for await (const player of players){
+                        await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [player.wager, player.id]);
+                        player.hand = [];
+                        player.hand.push(deck.splice(0, 1)[0]);
+                    }
+                    //dealerHand.push(deck.splice(0, 1)[0]);
+                    dealerHand.push([0, 1]);
+                    for (const player of players){
+                        player.hand.push(deck.splice(0, 1)[0]);
+                        player.value = addCards(player.hand);
+                    }
+                    //dealerHand.push(deck.splice(0, 1)[0]);
+                    dealerHand.push([0, 11]);
+                    
+                    const canvas = createCanvas(720, 540);
+                    const ctx = canvas.getContext('2d');
                     ctx.save();
-
+    
+                    const tableImg = await loadImage("images/blackjack/table.png");
+                    const cardSheet = await loadImage("images/blackjack/card-sheet.png");
+                    const cardBack = await loadImage("images/blackjack/card-back.png");
+                    const arrow = await loadImage("images/blackjack/arrow.png");
+    
+                    ctx.drawImage(tableImg, 0, 0);
+    
                     ctx.beginPath();
-                    ctx.arc(player.x+45, 350, 40, 0, Math.PI * 2, true);
+                    ctx.arc(285, 55, 40, 0, Math.PI * 2, true);
                     ctx.closePath();
                     ctx.clip();
+    
+                    const dealerAvatarResponse = await axios.get(interaction.client.user.displayAvatarURL({ format: 'png' }), { responseType: 'arraybuffer' });
+                    const dealerAvatar = new Image();
+                    dealerAvatar.src = dealerAvatarResponse.data;
+                    ctx.drawImage(dealerAvatar, 245, 15, 80, 80);
                     
-                    const avatarResponse = await axios.get(player.user.displayAvatarURL({ format: 'png' }), { responseType: 'arraybuffer' });
-                    const avatar = new Image();
-                    avatar.src = avatarResponse.data;
-
-                    ctx.drawImage(avatar, player.x+5, 310, 80, 80);
-
                     ctx.restore();
+                    ctx.drawImage(cardSheet, (dealerHand[0][1]-1)*64, dealerHand[0][0]*100, 64, 100, 338, 10, 64, 100);
+                    ctx.drawImage(cardBack, 352, 10);
+    
+    
+                    players.reverse();
+                    for(let i = 0; i < players.length; i++){
+                        players[i].x = (i+1)*720/(players.length+1)-120;
+                    }
+                    players.reverse();
+    
+                    for await (const player of players){
+                        ctx.save();
+    
+                        ctx.beginPath();
+                        ctx.arc(player.x+45, 475, 40, 0, Math.PI * 2, true);
+                        ctx.closePath();
+                        ctx.clip();
+                        
+                        const avatarResponse = await axios.get(player.user.displayAvatarURL({ format: 'png' }), { responseType: 'arraybuffer' });
+                        const avatar = new Image();
+                        avatar.src = avatarResponse.data;
+    
+                        ctx.drawImage(avatar, player.x+5, 435, 80, 80);
+    
+                        ctx.restore();
+    
+                        ctx.drawImage(cardSheet, (player.hand[0][1]-1)*64, player.hand[0][0]*100, 64, 100, player.x+92, 415, 64, 100);
+                        ctx.drawImage(cardSheet, (player.hand[1][1]-1)*64, player.hand[1][0]*100, 64, 100, player.x+92+14, 415-25, 64, 100);
+                    }
+                    
+                    for await(const player of players){
+                        ctx.drawImage(arrow, player.x+25, 385);
+    
+                        if(dealerHand[0][1] == 1){
+                            const userDB3 = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [player.id]);
+                            if(userDB3[0][0].scritch_bucks < Math.ceil(player.wager/2)){
+                                await channel.send(`${player.displayName} doesn't have enough scritch bucks for insurance.`);
+                            } else {
+                                const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                                await channel.send({ content: `${player.displayName}, do you want insurance? Reply with yes or no.`, files: [attachment] });
+        
+                                const filter = msg => msg.author.id == player.id && msg.content.match(/^yes|no/i);
+        
+                                const collected = await channel.awaitMessages({ filter, max: 1, time: 20000 });
+    
+                                if(collected.first() && collected.first().content.toLowerCase() == 'yes'){
+                                    player.insurance = Math.ceil(player.wager/2);
+                                    await channel.send(`${player.displayName} has opted for insurance and put forward ${player.insurance}.`);
+                                    await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [player.insurance, player.id]);
+                                }
+                            }
+                        }
+    
+                        if(player.value == 21){
+                            const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                            await channel.send({ content: `${player.displayName} got blackjack!`, files: [attachment] });
+                            await sleep(3000);
+                        } else {
+                            const obj = await turn(deck, channel, ctx, canvas, cardSheet, player, conn);
+                            deck = obj.deck;
+                            player.hand = obj.player.hand;
+                            player.wager = obj.player.wager;
+                            player.surrendered = obj.player.surrendered;
+                            player.busted = obj.player.busted;
+                            player.value = addCards(player.hand);
+                        }
+                        ctx.drawImage(tableImg, player.x+25, 385, 40, 40, player.x+25, 385, 40, 40);
+                    }
+    
+                    let dealerValue = addCards(dealerHand);
+                    ctx.drawImage(cardSheet, (dealerHand[1][1]-1)*64, dealerHand[1][0]*100, 64, 100, 352, 10, 64, 100);
+                    
+                    if(dealerHand[0][1] == 1){
+                        let msg = '';
+                        if(dealerValue == 21){
+                            for(const player of players){
+                                if(player.insurance){
+                                    msg += `${player.displayName} won ${2*player.insurance} in insurance.\n`;
+                                    await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', [2*player.insurance, player.id]);
+                                }
+                            }
+                        } else {
+                            for(const player of players){
+                                if(player.insurance){
+                                    msg += `${player.displayName} lost ${player.insurance} in insurance.`;
+                                }
+                            }
+                        }
+                        const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                        await channel.send({ content: msg, files: [attachment2] });
+                        await sleep(4000);
+                    }
 
-                    ctx.drawImage(cardSheet, (player.hand[0][1]-1)*64, player.hand[0][0]*100, 64, 100, player.x+98, 310, 64, 100);
-                    ctx.drawImage(cardSheet, (player.hand[1][1]-1)*64, player.hand[1][0]*100, 64, 100, player.x+112, 310, 64, 100);
-                }
+                    if(dealerValue < 17){
+                        deck = await dealerTurn(deck, channel, ctx, cardSheet, dealerHand);
+                    } 
+                    dealerValue = addCards(dealerHand);
+
+                    let msg2;
+                    if(dealerValue > 21){
+                        msg2 = `The dealer busted!\n`;
+                        for (const player of players){
+                            if(player.busted){
+                                msg2 += `${player.displayName} lost ฅ${player.wager}.\n`;
+                            } else if(player.surrendered){
+                                const loss = Math.ceil(player.wager/2);
+                                msg2 += `${player.displayName} lost ฅ${loss}.\n`
+                                await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', [player.wager-loss, player.id]);
+                            } else {
+                                const win = (player.value == 21) ? Math.ceil(player.wager*1.5) : player.wager;
+                                msg2 += `${player.displayName} won ฅ${win}.\n`
+                                await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', [player.wager+win, player.id]);
+                            }
+                        }
+                    } else {
+                        msg2 = `Dealer got ${dealerValue}.\n`;
+                        for (const player of players){
+                            if(player.busted){
+                                msg2 += `${player.displayName} lost ฅ${player.wager}.\n`
+                            } else if(player.surrendered){
+                                const loss = Math.ceil(player.wager/2);
+                                msg2 += `${player.displayName} lost ฅ${loss}.\n`
+                                await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', [player.wager-loss, player.id]);
+                            } else {
+                                if(player.value > dealerValue){
+                                    const win = (player.value == 21) ? Math.ceil(player.wager*1.5) : player.wager;
+                                    msg2 += `${player.displayName} won ฅ${win}.\n`
+                                    await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', [player.wager+win, player.id]);
+                                } else if(player.value == dealerValue){
+                                    msg2 += `${player.displayName} pushed.\n`
+                                    await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', [player.wager, player.id]);
+                                } else {
+                                    msg2 += `${player.displayName} lost ฅ${player.wager}.\n`;
+                                }
+                            }
+                        }
+                    }
+                    const attachment3 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                    await channel.send({ content: msg2, files: [attachment3] });
                 
-                for await(const player of players){
-                    ctx.drawImage(tableImg, 0, 260, 720, 40, 0, 260, 720, 40);
-                    ctx.drawImage(arrow, player.x+25, 260);
-
-                    const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
-                    await channel.send({ content: `It is ${player.displayName}'s turn.`, files: [attachment] });
-
-                    await turn(player);
+                    await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+                } catch(err){
+			       await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+                   throw err;
                 }
-
-			    await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
             });
 		} finally{
 			conn.release();
