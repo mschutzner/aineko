@@ -285,7 +285,7 @@ module.exports = {
                         player.hand.push(deck.splice(0, 1)[0]);
                     }
                     dealerHand.push(deck.splice(0, 1)[0]);
-                    for (const player of players){
+                    for await (const player of players){
                         player.hand.push(deck.splice(0, 1)[0]);
                         player.value = addCards(player.hand);
                     }
@@ -388,22 +388,24 @@ module.exports = {
                     if(dealerHand[0][1] == 1){
                         let msg = '';
                         if(dealerValue == 21){
-                            for(const player of players){
+                            for await (const player of players){
                                 if(player.insurance){
                                     msg += `${player.displayName} won ${2*player.insurance} in insurance.\n`;
                                     await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', [2*player.insurance, player.id]);
                                 }
                             }
                         } else {
-                            for(const player of players){
+                            for await (const player of players){
                                 if(player.insurance){
                                     msg += `${player.displayName} lost ${player.insurance} in insurance.`;
                                 }
                             }
                         }
-                        const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
-                        await channel.send({ content: msg, files: [attachment2] });
-                        await sleep(4000);
+                        if(msg){
+                            const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
+                            await channel.send({ content: msg, files: [attachment2] });
+                            await sleep(4000);
+                        }
                     }
 
                     if(dealerValue < 17){
@@ -414,7 +416,7 @@ module.exports = {
                     let msg2;
                     if(dealerValue > 21){
                         msg2 = `The dealer busted!\n`;
-                        for (const player of players){
+                        for await (const player of players){
                             if(player.busted){
                                 msg2 += `${player.displayName} lost ฅ${player.wager}.\n`;
                             } else if(player.surrendered){
@@ -429,7 +431,7 @@ module.exports = {
                         }
                     } else {
                         msg2 = `Dealer got ${dealerValue}.\n`;
-                        for (const player of players){
+                        for await (const player of players){
                             if(player.busted){
                                 msg2 += `${player.displayName} lost ฅ${player.wager}.\n`
                             } else if(player.surrendered){

@@ -367,8 +367,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
 					//remove existing role
 					const curColorRoleDB = await conn.query('SELECT `role_id` FROM `color_role` WHERE `guild_id`= ? AND `color_id` = ?;',
 						[guild.id, curColor]);
-					const curColorRoleId = curColorRoleDB[0][0].role_id;
-					await member.roles.remove(curColorRoleId);
+					await member.roles.remove(curColorRoleDB[0][0].role_id);
 
 					//add color role to member
 					await member.roles.add(colorRoleId);
@@ -381,6 +380,11 @@ client.on('messageReactionAdd', async (reaction, user) => {
 							[color, guild.id, member.id]);
 					}
 
+					//add member role
+					const guildDB = await conn.query('SELECT `member_role_id` FROM `guild` WHERE `guild_id` = ?;',
+						[guild.id]);
+					const memberRoleId = guildDB[0][0].member_role_id;
+					await member.roles.add(memberRoleId)
 				} else { //member doesn't exist yet
 
 					//add color role to member
@@ -518,6 +522,14 @@ async function activityLoop(){
 		const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1;');
 		for await(const guildDB of guildsDB[0]){
 			const guild = await client.guilds.fetch(guildDB.guild_id);
+
+			const colorMenuDB = await conn.query('SELECT * FROM `menu` where `type` = "color" AND `guild_id` = ?;', [guild.id]);
+			let colorMsg;
+			if(colorMenuDB[0].length > 0){
+				const colorChannel = await guild.channels.fetch(colorMenuDB[0][0].channel_id);
+				colorMsg = await colorChannel.messages.fetch(colorMenuDB[0][0].message_id);
+			}
+
 			const membersDB = await conn.query('SELECT * FROM `member` where `guild_id` = ?;', [guild.id]);
 			for await(const memberDB of membersDB[0]){
 				const member = await guild.members.fetch(memberDB.user_id);
@@ -530,7 +542,22 @@ async function activityLoop(){
 					if(activityPoints < memberMin) activityPoints = memberMin;
 				}
 
-				if(member.roles.cache.has(guildDB.member_role_id) && activityPoints < lurkerMin ) await member.roles.remove(guildDB.member_role_id);
+				if(member.roles.cache.has(guildDB.member_role_id) && activityPoints < lurkerMin ){
+					await member.roles.remove(guildDB.member_role_id);
+
+					//remove existing reaction
+					const curColor = memberDB.color_id;
+					const curColorDB = await conn.query('SELECT `emoji_id` FROM `color` WHERE `_id` = ?;', [curColor]);
+					const curColorEmojiId = curColorDB[0][0].emoji_id;
+					if(colorMsg) await colorMsg.reactions.cache.find(r => r.emoji.id == curColorEmojiId).users.remove(member.id);
+
+					//remove existing color role
+					const curColorRoleDB = await conn.query('SELECT `role_id` FROM `color_role` WHERE `guild_id`= ? AND `color_id` = ?;',
+						[guild.id, curColor]);
+					await member.roles.remove(curColorRoleDB[0][0].role_id);
+
+					member.send(`You're member status has lapsed on ${guild.name} because of inactivity. You can reclaim your member status by simply agreeing to the rules again by choosing a name color.`);
+				}
 				if(!member.roles.cache.has(guildDB.regular_role_id) && activityPoints > regularMin) await member.roles.add(guildDB.regular_role_id);
 				if(member.roles.cache.has(guildDB.regular_role_id) && activityPoints < regularMin) await member.roles.remove(guildDB.regular_role_id);
 				if(!member.roles.cache.has(guildDB.champion_role_id) && activityPoints > championMin) await member.roles.add(guildDB.champion_role_id);
@@ -615,14 +642,16 @@ client.once("ready", async () => {
 		conn.release();
 	}
 	
-	// const guild = await client.guilds.fetch('515742178216116226');
-	// const channel = await guild.channels.fetch('910655271691505725');
-	// const msg = await channel.messages.fetch('984218420163801198');
-	// msg.edit(`React with 🔔 to recieve announcement pings.`);
-	// 	msg.react('🎥');
+	// const guild = await client.guilds.fetch('825883828798881822');
+	// const channel = await guild.channels.fetch('865713507136045117');
+	// const msg = await channel.messages.fetch('995930815919833139');
+	// const colorsDB = await conn.query('SELECT * FROM `color`;');
+	// for await (const color of colorsDB[0]){
+	// 	msg.react(color.emoji_id)
+	// }
 
 	setTimeout(activityLoop, tickRate);
-	//activityLoop();
+	// activityLoop();
 	
 	questionLoop();
 
