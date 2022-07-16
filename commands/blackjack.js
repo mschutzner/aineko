@@ -61,8 +61,13 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                     await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [player.wager, player.id]);
     
                     player.hand.push(deck.splice(0, 1)[0]);
-        
-                    ctx.drawImage(cardSheet, (player.hand[player.hand.length-1][1]-1)*64, player.hand[player.hand.length-1][0]*100, 64, 100, player.x+92+14*(player.hand.length-1), 415-25*(player.hand.length-1), 64, 100);
+                    // player.hand.push([0,1]);
+                    
+                    player.hand.reverse();
+                    for (const index in player.hand){
+                        ctx.drawImage(cardSheet, (player.hand[index][1]-1)*64, player.hand[index][0]*100, 64, 100, player.x+92+20*(player.hand.length-index-1), 415-50*(player.hand.length-index-1), 64, 100);
+                    }
+                    player.hand.reverse();
             
                     player.value = addCards(player.hand);
                     if(player.value == 21){
@@ -87,8 +92,13 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                     }
                 } else {
                     player.hand.push(deck.splice(0, 1)[0]);
+                    // player.hand.push([0,1]);
         
-                    ctx.drawImage(cardSheet, (player.hand[player.hand.length-1][1]-1)*64, player.hand[player.hand.length-1][0]*100, 64, 100, player.x+92+14*(player.hand.length-1), 415-25*(player.hand.length-1), 64, 100);
+                    player.hand.reverse();
+                    for (const index in player.hand){
+                        ctx.drawImage(cardSheet, (player.hand[index][1]-1)*64, player.hand[index][0]*100, 64, 100, player.x+92+20*(player.hand.length-index-1), 415-50*(player.hand.length-index-1), 64, 100);
+                    }
+                    player.hand.reverse();
     
                     player.value = addCards(player.hand);
                     if(player.value == 21){
@@ -131,9 +141,14 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                     return obj;
                 } else {
                     player.hand.push(deck.splice(0, 1)[0]);
-        
-                    ctx.drawImage(cardSheet, (player.hand[player.hand.length-1][1]-1)*64, player.hand[player.hand.length-1][0]*100, 64, 100, player.x+92+14*(player.hand.length-1), 415-25*(player.hand.length-1), 64, 100);
-    
+                    // player.hand.push([0,1]);
+       
+                    player.hand.reverse();
+                    for (const index in player.hand){
+                        ctx.drawImage(cardSheet, (player.hand[index][1]-1)*64, player.hand[index][0]*100, 64, 100, player.x+92+20*(player.hand.length-index-1), 415-50*(player.hand.length-index-1), 64, 100);
+                    }
+                    player.hand.reverse();
+
                     player.value = addCards(player.hand);
                     if(player.value == 21){
                         const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
@@ -168,9 +183,14 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
         const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
         if(collected.first() && collected.first().content.toLowerCase() == 'hit'){
             player.hand.push(deck.splice(0, 1)[0]);
+            // player.hand.push([0,1]);
     
-            ctx.drawImage(cardSheet, (player.hand[player.hand.length-1][1]-1)*64, player.hand[player.hand.length-1][0]*100, 64, 100, player.x+92+14*(player.hand.length-1), 415-25*(player.hand.length-1), 64, 100);
-    
+            player.hand.reverse();
+            for (const index in player.hand){
+                ctx.drawImage(cardSheet, (player.hand[index][1]-1)*64, player.hand[index][0]*100, 64, 100, player.x+92+20*(player.hand.length-index-1), 415-50*(player.hand.length-index-1), 64, 100);
+            }
+            player.hand.reverse();
+
             player.value = addCards(player.hand);
             if(player.value == 21){
                 const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
@@ -198,14 +218,29 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
 
 }
 
-async function dealerTurn(deck, channel, ctx, cardSheet, dealerHand){
+async function dealerTurn(deck, channel, ctx, cardSheet, tableImg, dealerAvatar, dealerHand){
+    ctx.drawImage(tableImg, 0, 0, 720, 140, 0, 0, 720, 140);
+
     dealerHand.push(deck.splice(0, 1)[0]);
+    // dealerHand.push([0,1]);
+
+    const x = (720/2)-(85+69*dealerHand.length)/2
     
-    ctx.drawImage(cardSheet, (dealerHand[dealerHand.length-1][1]-1)*64, dealerHand[dealerHand.length-1][0]*100, 64, 100, 338+14*(dealerHand.length-1), 10, 64, 100);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x+40, 55, 40, 0, Math.PI * 2, true);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(dealerAvatar, x, 15, 80, 80);
+    ctx.restore();
+
+    for(const index in dealerHand){
+        ctx.drawImage(cardSheet, (dealerHand[index][1]-1)*64, dealerHand[index][0]*100, 64, 100, x+85+69*index, 10, 64, 100);
+    }
 
     const dealerValue = addCards(dealerHand);
     if(dealerValue < 17){
-        deck = await dealerTurn(deck, channel, ctx, cardSheet, dealerHand);
+        deck = await dealerTurn(deck, channel, ctx, cardSheet, tableImg, dealerAvatar, dealerHand);
     }
     
     return deck;
@@ -308,13 +343,17 @@ module.exports = {
                     for await (const player of players){
                         player.hand = [];
                         player.hand.push(deck.splice(0, 1)[0]);
+                        // player.hand.push([0,1]);
                     }
                     dealerHand.push(deck.splice(0, 1)[0]);
+                    // dealerHand.push([0,1]);
                     for await (const player of players){
                         player.hand.push(deck.splice(0, 1)[0]);
+                        // player.hand.push([0,1]);
                         player.value = addCards(player.hand);
                     }
                     dealerHand.push(deck.splice(0, 1)[0]);
+                    // dealerHand.push([0,1]);
                     const canvas = createCanvas(720, 540);
                     const ctx = canvas.getContext('2d');
                     ctx.save();
@@ -327,18 +366,18 @@ module.exports = {
                     ctx.drawImage(tableImg, 0, 0);
     
                     ctx.beginPath();
-                    ctx.arc(285, 55, 40, 0, Math.PI * 2, true);
+                    ctx.arc(284, 55, 40, 0, Math.PI * 2, true);
                     ctx.closePath();
                     ctx.clip();
     
                     const dealerAvatarResponse = await axios.get(interaction.client.user.displayAvatarURL({ format: 'png' }), { responseType: 'arraybuffer' });
                     const dealerAvatar = new Image();
                     dealerAvatar.src = dealerAvatarResponse.data;
-                    ctx.drawImage(dealerAvatar, 245, 15, 80, 80);
+                    ctx.drawImage(dealerAvatar, 244, 15, 80, 80);
                     
                     ctx.restore();
-                    ctx.drawImage(cardSheet, (dealerHand[0][1]-1)*64, dealerHand[0][0]*100, 64, 100, 338, 10, 64, 100);
-                    ctx.drawImage(cardBack, 352, 10);
+                    ctx.drawImage(cardSheet, (dealerHand[0][1]-1)*64, dealerHand[0][0]*100, 64, 100, 329, 10, 64, 100);
+                    ctx.drawImage(cardBack, 398, 10);
     
     
                     players.reverse();
@@ -363,8 +402,8 @@ module.exports = {
     
                         ctx.restore();
     
+                        ctx.drawImage(cardSheet, (player.hand[1][1]-1)*64, player.hand[1][0]*100, 64, 100, player.x+92+20, 415-50, 64, 100);
                         ctx.drawImage(cardSheet, (player.hand[0][1]-1)*64, player.hand[0][0]*100, 64, 100, player.x+92, 415, 64, 100);
-                        ctx.drawImage(cardSheet, (player.hand[1][1]-1)*64, player.hand[1][0]*100, 64, 100, player.x+92+14, 415-25, 64, 100);
                     }
                     
                     for await(const player of players){
@@ -396,18 +435,15 @@ module.exports = {
                             await sleep(3000);
                         } else {
                             const obj = await turn(deck, channel, ctx, canvas, cardSheet, player, conn);
-                            deck = obj.deck;
-                            player.hand = obj.player.hand;
-                            player.wager = obj.player.wager;
-                            player.surrendered = obj.player.surrendered;
-                            player.busted = obj.player.busted;
+                            Object.assign(deck, obj.deck);
+                            Object.assign(player, obj.player);
                             player.value = addCards(player.hand);
                         }
                         ctx.drawImage(tableImg, player.x+25, 385, 40, 40, player.x+25, 385, 40, 40);
                     }
     
                     let dealerValue = addCards(dealerHand);
-                    ctx.drawImage(cardSheet, (dealerHand[1][1]-1)*64, dealerHand[1][0]*100, 64, 100, 352, 10, 64, 100);
+                    ctx.drawImage(cardSheet, (dealerHand[1][1]-1)*64, dealerHand[1][0]*100, 64, 100, 398, 10, 64, 100);
                     
                     if(dealerHand[0][1] == 1){
                         let msg = '';
@@ -433,7 +469,7 @@ module.exports = {
                     }
 
                     if(dealerValue < 17){
-                        deck = await dealerTurn(deck, channel, ctx, cardSheet, dealerHand);
+                        deck = await dealerTurn(deck, channel, ctx, cardSheet, tableImg, dealerAvatar, dealerHand);
                     } 
                     dealerValue = addCards(dealerHand);
 
