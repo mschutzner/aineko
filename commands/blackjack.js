@@ -41,12 +41,12 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
         const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [player.id]);
         if(userDB[0][0].scritch_bucks >= player.wager){
             const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
-            await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit, fold, double down, or surrender.`, files: [attachment] });
+            await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit, stand, double down, or surrender.`, files: [attachment] });
             
-            const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|surrender|double down|/i);
+            const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|stand|surrender|double down/i);
             const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
             
-            if(collected.first() && collected.first().content.toLowerCase() != 'fold'){
+            if(collected.first() && collected.first().content.toLowerCase() !== 'stand'){
                 if (collected.first().content.toLowerCase() == 'surrender') {
                     player.surrendered = true;
                     player.wager = Math.ceil(player.wager/2);
@@ -110,18 +110,18 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                     }
                 }
             } else {
-                await channel.send(`${player.displayName} has folded.`);
+                await channel.send(`${player.displayName} stood.`);
                 const obj = { deck, player};
                 return obj;
             }
         } else {
             const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
-            await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit, fold, or surrender.`, files: [attachment] });
+            await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit, stand, or surrender.`, files: [attachment] });
             
-            const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|fold|surrender/i);
+            const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|stand|surrender/i);
             const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
             
-            if(collected.first() && collected.first().content.toLowerCase() != 'fold'){
+            if(collected.first() && collected.first().content.toLowerCase() !== 'stand'){
                 if (collected.first().content.toLowerCase() == 'surrender') {
                     player.surrendered = true;
                     const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
@@ -154,16 +154,16 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                     }
                 }
             } else {
-                await channel.send(`${player.displayName} has folded.`);
+                await channel.send(`${player.displayName} stood.`);
                 const obj = { deck, player};
                 return obj;
             }
         }
     } else {
         const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
-        await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit or fold.`, files: [attachment] });
+        await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit or stand.`, files: [attachment] });
         
-        const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|fold/i);
+        const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|stand/i);
     
         const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
         if(collected.first() && collected.first().content.toLowerCase() == 'hit'){
@@ -190,7 +190,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                 return obj;
             }
         } else {
-            await channel.send(`${player.displayName} has folded.`);
+            await channel.send(`${player.displayName} stood.`);
             const obj = { deck, player};
             return obj;
         }
@@ -199,7 +199,8 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
 }
 
 async function dealerTurn(deck, channel, ctx, cardSheet, dealerHand){
-    dealerHand.push(deck.splice(0, 1)[0]);
+    // dealerHand.push(deck.splice(0, 1)[0]);
+    dealerHand.push([0,8]);
     
     ctx.drawImage(cardSheet, (dealerHand[dealerHand.length-1][1]-1)*64, dealerHand[dealerHand.length-1][0]*100, 64, 100, 338+14*(dealerHand.length-1), 10, 64, 100);
 
@@ -242,7 +243,9 @@ module.exports = {
 
             const players = [interaction.member]
             players[0].wager = wager;
-            await interaction.reply(`${interaction.member.displayName} has started a game of blackjack with a wager of ฅ${wager}! Reply with join followed by the amount of scritch bucks you'd like to wager. The game starts in one minute or when a player replies with "start".`);
+            await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [wager, interaction.member.id]);
+
+            await interaction.reply(`${interaction.member.displayName} has started a game of blackjack with a wager of ฅ${wager}! Reply with join followed by the amount of scritch bucks you'd like to wager. The game starts in one minute or when a player replies with "start". ${interaction.member.displayName} can cancel the game by responding with "cancel".`);
     
             let deck = [];
             for(let i = 0; i < 6; i++){
@@ -254,43 +257,67 @@ module.exports = {
             }
             deck = shuffle(deck);
     
-            const joinFilter = msg => msg.content.match(/^join ฅ?[1-9]+[0-9]*/i) && !players.some(player => player.id == msg.member.id)
+            const joinFilter = msg => msg.content.match(/^join ฅ?[1-9]+[0-9]*/i) && !players.some(player => player.id == msg.member.id);
             const joinCollector = channel.createMessageCollector({ filter: joinFilter, time: 60000});
     
             joinCollector.on('collect', async msg => {
                 const regex = msg.content.match(/^join ฅ?([1-9]+[0-9]*)/i);
+                const wager = parseInt(regex[1])
                 const userDB2 = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [msg.member.id]);
-                if(regex[1] > userDB2[0][0].scritch_bucks) return channel.send("You don't have enough scritch bucks.");
-                msg.member.wager = regex[1];
+                if(wager > userDB2[0][0].scritch_bucks) return channel.send("You don't have enough scritch bucks.");
+                await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [wager, msg.member.id]);
+                msg.member.wager = wager;
                 players.push(msg.member);
                 if(players.length >= 3) joinCollector.stop();
-                channel.send(`${msg.member.displayName} has joined the game with a wager of ฅ${regex[1]}!`);
+                channel.send(`${msg.member.displayName} has joined the game with a wager of ฅ${wager}!`);
             });
     
-            const startFilter = msg => msg.content.toLowerCase() == "start" && players.some(player => player.id == msg.member.id)
-            const startCollector = channel.createMessageCollector({ filter: startFilter, time: 30000, max: 1 });
+            const startFilter = msg => msg.content.toLowerCase() == "start" && players.some(player => player.id == msg.member.id);
+            const startCollector = channel.createMessageCollector({ filter: startFilter, time: 60000, max: 1 });
     
-            startCollector.on('collect', () => {
+            startCollector.on('collect', async msg => {
                 joinCollector.stop();
             });
     
+            let gameCanceld = false;
+            const cancelFilter = msg => msg.content.toLowerCase() == "cancel" && msg.member.id == players[0].id;
+            const cancelCollector = channel.createMessageCollector({ filter: cancelFilter, time: 60000, max: 1 });
+    
+            cancelCollector.on('collect', async msg => {
+                gameCanceled = true;
+
+                joinCollector.stop();
+                startCollector.stop();
+
+                //give players their wager back
+                for await(const player of players){
+                    await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', [player.wager, player.id]);
+                }
+                
+			    await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+
+                await channel.send(`Game of blackjack canceled!`);
+            });
+
+    
             joinCollector.on('end', async collected => {
+                if(gameCanceled) return;
                 try{
                     await sleep(500);
 
                     let dealerHand = [];
                     for await (const player of players){
-                        await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [player.wager, player.id]);
                         player.hand = [];
                         player.hand.push(deck.splice(0, 1)[0]);
                     }
-                    dealerHand.push(deck.splice(0, 1)[0]);
+                    // dealerHand.push(deck.splice(0, 1)[0]);
+                    dealerHand.push([0,8]);
                     for await (const player of players){
                         player.hand.push(deck.splice(0, 1)[0]);
                         player.value = addCards(player.hand);
                     }
-                    dealerHand.push(deck.splice(0, 1)[0]);
-                    
+                    // dealerHand.push(deck.splice(0, 1)[0]);
+                    dealerHand.push([0,8]);
                     const canvas = createCanvas(720, 540);
                     const ctx = canvas.getContext('2d');
                     ctx.save();
@@ -456,7 +483,12 @@ module.exports = {
                     await channel.send({ content: msg2, files: [attachment3] });
                 
                     await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
-                } catch(err){
+                } catch(err){                
+                    //give players their wager back
+                    for await(const player of players){
+                        await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', [player.wager, player.id]);
+                    }
+                    
 			       await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
                    throw err;
                 }
