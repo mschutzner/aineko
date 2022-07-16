@@ -17,9 +17,9 @@ function addCards(hand){
             case 1:
                 total += 11;
             break;
+            case 10:
             case 11:
             case 12:
-            case 13:
                 total += 10;
             break;
             default:
@@ -41,7 +41,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
         const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [player.id]);
         if(userDB[0][0].scritch_bucks >= player.wager){
             const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
-            await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit, stand, double down, or surrender.`, files: [attachment] });
+            await channel.send({ content: `It is <@${player.id}>'s turn. They have 30 seconds to reply with hit, stand, double down, or surrender.`, files: [attachment] });
             
             const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|stand|surrender|double down/i);
             const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
@@ -126,7 +126,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
             }
         } else {
             const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
-            await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit, stand, or surrender.`, files: [attachment] });
+            await channel.send({ content: `It is <@${player.id}>'s turn. They have 30 seconds to reply with hit, stand, or surrender.`, files: [attachment] });
             
             const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|stand|surrender/i);
             const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
@@ -176,7 +176,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
         }
     } else {
         const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
-        await channel.send({ content: `It is ${player.displayName}'s turn. They have 30 seconds to reply with hit or stand.`, files: [attachment] });
+        await channel.send({ content: `It is <@${player.id}>'s turn. They have 30 seconds to reply with hit or stand.`, files: [attachment] });
         
         const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|stand/i);
     
@@ -284,8 +284,9 @@ module.exports = {
             let deck = [];
             for(let i = 0; i < 6; i++){
                 for(let j = 0; j < 4; j++){
-                    for(let k = 1; k < 14; k++){
+                    for(let k = 1; k < 13; k++){
                         deck.push([j,k]);
+                        console.log(j, k);
                     }
                 }
             }
@@ -415,7 +416,7 @@ module.exports = {
                                 await channel.send(`${player.displayName} doesn't have enough scritch bucks for insurance.`);
                             } else {
                                 const attachment = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
-                                await channel.send({ content: `${player.displayName}, do you want insurance? Reply with yes or no.`, files: [attachment] });
+                                await channel.send({ content: `<@${player.id}>, do you want insurance? Reply with yes or no.`, files: [attachment] });
         
                                 const filter = msg => msg.author.id == player.id && msg.content.match(/^yes|no/i);
         
