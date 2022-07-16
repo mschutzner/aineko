@@ -199,8 +199,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
 }
 
 async function dealerTurn(deck, channel, ctx, cardSheet, dealerHand){
-    // dealerHand.push(deck.splice(0, 1)[0]);
-    dealerHand.push([0,8]);
+    dealerHand.push(deck.splice(0, 1)[0]);
     
     ctx.drawImage(cardSheet, (dealerHand[dealerHand.length-1][1]-1)*64, dealerHand[dealerHand.length-1][0]*100, 64, 100, 338+14*(dealerHand.length-1), 10, 64, 100);
 
@@ -279,7 +278,7 @@ module.exports = {
                 joinCollector.stop();
             });
     
-            let gameCanceld = false;
+            let gameCanceled = false;
             const cancelFilter = msg => msg.content.toLowerCase() == "cancel" && msg.member.id == players[0].id;
             const cancelCollector = channel.createMessageCollector({ filter: cancelFilter, time: 60000, max: 1 });
     
@@ -310,14 +309,12 @@ module.exports = {
                         player.hand = [];
                         player.hand.push(deck.splice(0, 1)[0]);
                     }
-                    // dealerHand.push(deck.splice(0, 1)[0]);
-                    dealerHand.push([0,8]);
+                    dealerHand.push(deck.splice(0, 1)[0]);
                     for await (const player of players){
                         player.hand.push(deck.splice(0, 1)[0]);
                         player.value = addCards(player.hand);
                     }
-                    // dealerHand.push(deck.splice(0, 1)[0]);
-                    dealerHand.push([0,8]);
+                    dealerHand.push(deck.splice(0, 1)[0]);
                     const canvas = createCanvas(720, 540);
                     const ctx = canvas.getContext('2d');
                     ctx.save();
