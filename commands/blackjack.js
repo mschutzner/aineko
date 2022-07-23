@@ -17,9 +17,9 @@ function addCards(hand){
             case 1:
                 total += 11;
             break;
-            case 10:
             case 11:
             case 12:
+            case 13:
                 total += 10;
             break;
             default:
@@ -77,6 +77,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const obj = { deck, player};
                         return obj;
                     } else if(player.value > 21){
+                        console.log(1);
                         player.busted = true;
                         const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
                         await channel.send({ content: `${player.displayName} has doubled down and busted.`, files: [attachment2] });
@@ -108,6 +109,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const obj = { deck, player};
                         return obj;
                     } else if(player.value > 21){
+                        console.log(2);
                         player.busted = true;
                         const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
                         await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
@@ -157,6 +159,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const obj = { deck, player};
                         return obj;
                     } else if(player.value > 21){
+                        console.log(3);
                         player.busted = true;
                         const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
                         await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
@@ -199,6 +202,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                 const obj = { deck, player};
                 return obj;
             } else if(player.value > 21){
+                console.log(4);
                 player.busted = true;
                 const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
                 await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
@@ -284,9 +288,8 @@ module.exports = {
             let deck = [];
             for(let i = 0; i < 6; i++){
                 for(let j = 0; j < 4; j++){
-                    for(let k = 1; k < 13; k++){
+                    for(let k = 1; k <= 13; k++){
                         deck.push([j,k]);
-                        console.log(j, k);
                     }
                 }
             }
@@ -344,13 +347,13 @@ module.exports = {
                     for await (const player of players){
                         player.hand = [];
                         player.hand.push(deck.splice(0, 1)[0]);
-                        // player.hand.push([0,1]);
+                        // player.hand.push([1,1]);
                     }
                     dealerHand.push(deck.splice(0, 1)[0]);
                     // dealerHand.push([0,1]);
                     for await (const player of players){
                         player.hand.push(deck.splice(0, 1)[0]);
-                        // player.hand.push([0,1]);
+                        // player.hand.push([3,12]);
                         player.value = addCards(player.hand);
                     }
                     dealerHand.push(deck.splice(0, 1)[0]);

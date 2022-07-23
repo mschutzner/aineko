@@ -589,14 +589,16 @@ async function questionLoop(){
 			const sqlDate = new Date().toISOString().slice(0, 10);
 			const questionDB = await conn.query('SELECT * FROM `question` WHERE `date` = ?;', [sqlDate]);
 
-			if(questionDB[0].length < 1) return console.error("No question of the day!");
-
-			const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1;');
-			for await(const guildDB of guildsDB[0]){
-				if(!guildDB.question_channel) return;
-				const guild = await client.guilds.fetch(guildDB.guild_id);
-				const channel = await guild.channels.fetch(guildDB.question_channel);
-				channel.send(`It's now <t:${questionTime/1000}> and it's time for the **question of the day!** \`\`\`${questionDB[0][0].question}\`\`\``);
+			if(questionDB[0].length < 1){
+				console.error("No question of the day!");
+			} else {
+				const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1;');
+				for await(const guildDB of guildsDB[0]){
+					if(!guildDB.question_channel) return;
+					const guild = await client.guilds.fetch(guildDB.guild_id);
+					const channel = await guild.channels.fetch(guildDB.question_channel);
+					channel.send(`It's now <t:${questionTime/1000}> and it's time for the **question of the day!** \`\`\`${questionDB[0][0].question}\`\`\``);
+				}
 			}
 		} finally{
 			//release pool connection
