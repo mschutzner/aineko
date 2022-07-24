@@ -11,6 +11,7 @@ module.exports = {
         .setDescription('Bob Ross paints a pretty little profile picture.')
         .addUserOption(option => option.setName('user')
             .setDescription('The user to be painted.')),
+    catId: 3, //bob
     async execute(interaction) {
         const size = 256;
         const canvas = Canvas.createCanvas(size, size);

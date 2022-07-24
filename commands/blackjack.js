@@ -63,6 +63,15 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                     player.hand.push(deck.splice(0, 1)[0]);
                     // player.hand.push([0,1]);
                     
+                    if(player.value == 20){
+                        //add Murphy to user;
+                        const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+                            [player.id, 4, player.displayName, 'Murphy']);
+                        if(userCatDB[0].affectedRows){
+                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack!', files: ['images/cats/Murphy.jpg']});
+                        }
+                    }
+
                     player.hand.reverse();
                     for (const index in player.hand){
                         ctx.drawImage(cardSheet, (player.hand[index][1]-1)*64, player.hand[index][0]*100, 64, 100, player.x+92+20*(player.hand.length-index-1), 415-50*(player.hand.length-index-1), 64, 100);
@@ -94,6 +103,15 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                 } else {
                     player.hand.push(deck.splice(0, 1)[0]);
                     // player.hand.push([0,1]);
+                    
+                    if(player.value == 20){
+                        //add Murphy to user;
+                        const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+                            [player.id, 4, player.displayName, 'Murphy']);
+                        if(userCatDB[0].affectedRows){
+                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack!', files: ['images/cats/Murphy.jpg']});
+                        }
+                    }
         
                     player.hand.reverse();
                     for (const index in player.hand){
@@ -144,6 +162,15 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                 } else {
                     player.hand.push(deck.splice(0, 1)[0]);
                     // player.hand.push([0,1]);
+                    
+                    if(player.value == 20){
+                        //add Murphy to user;
+                        const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+                            [player.id, 4, player.displayName, 'Murphy']);
+                        if(userCatDB[0].affectedRows){
+                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack!', files: ['images/cats/Murphy.jpg']});
+                        }
+                    }
        
                     player.hand.reverse();
                     for (const index in player.hand){
@@ -187,6 +214,15 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
         if(collected.first() && collected.first().content.toLowerCase() == 'hit'){
             player.hand.push(deck.splice(0, 1)[0]);
             // player.hand.push([0,1]);
+                    
+                    if(player.value == 20){
+                        //add Murphy to user;
+                        const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+                            [player.id, 4, player.displayName, 'Murphy']);
+                        if(userCatDB[0].affectedRows){
+                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack!', files: ['images/cats/Murphy.jpg']});
+                        }
+                    }
     
             player.hand.reverse();
             for (const index in player.hand){
@@ -347,13 +383,13 @@ module.exports = {
                     for await (const player of players){
                         player.hand = [];
                         player.hand.push(deck.splice(0, 1)[0]);
-                        // player.hand.push([1,1]);
+                        // player.hand.push([0,10]);
                     }
                     dealerHand.push(deck.splice(0, 1)[0]);
                     // dealerHand.push([0,1]);
                     for await (const player of players){
                         player.hand.push(deck.splice(0, 1)[0]);
-                        // player.hand.push([3,12]);
+                        // player.hand.push([0,10]);
                         player.value = addCards(player.hand);
                     }
                     dealerHand.push(deck.splice(0, 1)[0]);

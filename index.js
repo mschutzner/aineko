@@ -47,6 +47,7 @@ client.on("interactionCreate", async interaction => {
 
 	const guild = interaction.guild;
 	const member = interaction.member;
+	const user = interaction.user;
 
 	const conn = await pool.getConnection();
 	try {
@@ -57,8 +58,17 @@ client.on("interactionCreate", async interaction => {
 				ephemeral: true 
 			}); 
 		}
+		if(command.catId){
+			const catDB = await conn.query('SELECT * FROM `cat` WHERE `_id` = ?;', [command.catId]);
+			if(catDB[0].length > 0){
+				const userCatDB = await conn.query('SELECT * FROM `user_cat` WHERE (`user_id`, `cat_id`) = (?, ?);', [member.id, command.catId]);
+				if(userCatDB[0].length == 0) return  interaction.reply({ 
+					content: `You need to own ${catDB[0][0].name} to use /${interaction.commandName}.`,
+					ephemeral: true 
+				}); 
+			}
+		}
 		if(command.cooldown){
-			const user = interaction.user;
 			const cooldown = client.cooldowns.find(c => c.user == user.id && c.cmd == command.name);
 			if(cooldown){
 				const timeRemaining = cooldown.endTime - Date.now();
@@ -237,6 +247,12 @@ const guildCreate = async (guild) => {
 			if(member.id == client.user.id) continue;
 			await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
 				[member.id, member.displayName]);
+			//add Aineko cat to user;
+			const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+				[member.id, 1, member.displayName, 'Aineko']);
+			if(userCatDB[0].affectedRows){
+				member.send({content: 'You just gained ownership of Aineko having Aineko added to a server you are in. Aineko is your first cat but you can collect many more by interacting with the bot. Owning Aineko unlocks the /scritch command which you can use to earn "scritch bucks", an in bot currency represented by ฅ.', files: ['images/cats/Aineko.jpg']});
+			}
 		}
 	} finally{
 		//release pool connection
@@ -475,10 +491,23 @@ client.on('guildMemberAdd', async member => {
 	try{
 		await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
 			[member.id, member.displayName]);
-		const guildDB = await conn.query('SELECT `welcome_message` FROM `guild` WHERE `guild_id` = ?;', 
+		//add Aineko cat to user;
+		const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+			[member.id, 1, member.displayName, 'Aineko']);
+		if(userCatDB[0].affectedRows){
+			member.send({content: 'You just gained ownership of Aineko by joining your first server with Aineko in it. Aineko is your first cat but you can collect many more by interacting with the bot. Owning Aineko unlocks the /scritch command which you can use to earn "scritch bucks", an in bot currency represented by ฅ.', files: ['images/cats/Aineko.jpg']});
+		}
+
+		const guildDB = await conn.query('SELECT * FROM `guild` WHERE `guild_id` = ?;', 
 			[member.guild.id]);
-		if(!guildDB[0][0].welcome_message) return;
-		await member.guild.systemChannel.send(`Welcome, ${member.toString()}. ${guildDB[0][0].welcome_message}`)
+		if(guildDB[0][0].welcome_message){
+			const msg = `Welcome, ${member.toString()}. ${guildDB[0][0].welcome_message}`;
+			if(guildDB[0][0].welcome_image){
+				await member.guild.systemChannel.send( { content: msg, files: [guildDB[0][0].welcome_image] } );
+			} else {
+				await member.guild.systemChannel.send(msg);
+			}
+		}
 	} finally{
 		//release pool connection
 		conn.release();
@@ -634,8 +663,14 @@ client.once("ready", async () => {
 				members = [...members.values()];
 				for await (const member of members){
 					if(member.id == client.user.id) continue;
-					conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
+					await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
 						[member.id, member.displayName]);
+					//add Aineko cat to user;
+					const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+						[member.id, 1, member.displayName, 'Aineko']);
+					if(userCatDB[0].affectedRows){
+						member.send({content: 'You just gained ownership of Aineko by joining your first server with Aineko in it. Aineko is your first cat but you can collect many more by interacting with the bot. Owning Aineko unlocks the /scritch command which you can use to earn "scritch bucks", an in bot currency represented by ฅ.', files: ['images/cats/Aineko.jpg']});
+					}
 				}
 			}
 		});
@@ -646,11 +681,18 @@ client.once("ready", async () => {
 	
 	// const guild = await client.guilds.fetch('825883828798881822');
 	// const channel = await guild.channels.fetch('865713507136045117');
-	// const msg = await channel.messages.fetch('995930815919833139');
+	// const msg = await channel.messages.fetch('1000499776204312726');
 	// const colorsDB = await conn.query('SELECT * FROM `color`;');
 	// for await (const color of colorsDB[0]){
 	// 	msg.react(color.emoji_id)
+	// // }
+	// const reactions = await msg.reactions.cache;
+	// for(const reaction of reactions){
+	// 	console.log(reaction)
 	// }
+
+
+
 
 	setTimeout(activityLoop, tickRate);
 	// activityLoop();
