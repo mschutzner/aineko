@@ -69,7 +69,7 @@ client.on("interactionCreate", async interaction => {
 			}
 		}
 		if(command.cooldown){
-			const cooldown = client.cooldowns.find(c => c.user == user.id && c.cmd == command.name);
+			const cooldown = client.cooldowns.find(c => c.user == user.id && c.cmd == command.data.name);
 			if(cooldown){
 				const timeRemaining = cooldown.endTime - Date.now();
 				if(timeRemaining > 60000){
@@ -84,13 +84,13 @@ client.on("interactionCreate", async interaction => {
 				await command.execute(interaction, pool);
 				client.cooldowns.push({ 
 					user: user.id, 
-					cmd: command.name,
+					cmd: command.data.name,
 					endTime: Date.now() + command.cooldown
 				});
 				setTimeout(() => {
 					for(const i in client.cooldowns){
 						const obj = client.cooldowns[i];
-						if(obj.user == user.id && obj.cmd == command.name) client.cooldowns.splice(i,1);
+						if(obj.user == user.id && obj.cmd == command.data.name) client.cooldowns.splice(i,1);
 					}
 				}, command.cooldown);
 			}

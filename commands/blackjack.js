@@ -68,7 +68,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
                             [player.id, 4, player.displayName, 'Murphy']);
                         if(userCatDB[0].affectedRows){
-                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack!', files: ['images/cats/Murphy.jpg']});
+                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.', files: ['images/cats/Murphy.jpg']});
                         }
                     }
 
@@ -86,7 +86,6 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const obj = { deck, player};
                         return obj;
                     } else if(player.value > 21){
-                        console.log(1);
                         player.busted = true;
                         const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
                         await channel.send({ content: `${player.displayName} has doubled down and busted.`, files: [attachment2] });
@@ -109,7 +108,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
                             [player.id, 4, player.displayName, 'Murphy']);
                         if(userCatDB[0].affectedRows){
-                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack!', files: ['images/cats/Murphy.jpg']});
+                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.', files: ['images/cats/Murphy.jpg']});
                         }
                     }
         
@@ -127,7 +126,6 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const obj = { deck, player};
                         return obj;
                     } else if(player.value > 21){
-                        console.log(2);
                         player.busted = true;
                         const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
                         await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
@@ -168,7 +166,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
                             [player.id, 4, player.displayName, 'Murphy']);
                         if(userCatDB[0].affectedRows){
-                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack!', files: ['images/cats/Murphy.jpg']});
+                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.', files: ['images/cats/Murphy.jpg']});
                         }
                     }
        
@@ -186,7 +184,6 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const obj = { deck, player};
                         return obj;
                     } else if(player.value > 21){
-                        console.log(3);
                         player.busted = true;
                         const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
                         await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
@@ -220,7 +217,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
                             [player.id, 4, player.displayName, 'Murphy']);
                         if(userCatDB[0].affectedRows){
-                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack!', files: ['images/cats/Murphy.jpg']});
+                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.', files: ['images/cats/Murphy.jpg']});
                         }
                     }
     
@@ -238,7 +235,6 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                 const obj = { deck, player};
                 return obj;
             } else if(player.value > 21){
-                console.log(4);
                 player.busted = true;
                 const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
                 await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
@@ -555,6 +551,10 @@ module.exports = {
                     const attachment3 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
                     await channel.send({ content: msg2, files: [attachment3] });
                 
+                    for (const player of players){
+                        Object.assign(player, {});
+                    }
+
                     await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
                 } catch(err){                
                     //give players their wager back

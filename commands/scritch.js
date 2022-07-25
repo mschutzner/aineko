@@ -17,7 +17,7 @@ module.exports = {
 		.setName('scritch')
 		.setDescription('Give Aineko a good scritch and maybe get something in return.'),
 	cooldown: 180000,
-	catId: 1,
+	catId: 1, //aineko
 	async execute(interaction, pool) {
 		const client = interaction.client;
 		
