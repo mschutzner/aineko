@@ -299,17 +299,17 @@ module.exports = {
 
         const conn = await pool.getConnection();
 		try{
+            //check if player has enough scritch bucks and return if not.
+            const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [interaction.member.id]);
+            if(wager > userDB[0][0].scritch_bucks) return interaction.reply({content: "You don't have enough scritch bucks.", ephemeral: true});
+
+            //check if there is a game already running in the channel and return if so.
             const gameDB = await conn.query('SELECT `game` FROM `game` WHERE `channel_id` = ?;', [channel.id]);
             if(gameDB[0].length) return interaction.reply({ 
                 content: `There is already a game of ${gameDB[0][0].game} running in this channel.`,
                 ephemeral: true 
             });
-            
 			await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, ?);', [channel.id, "blackjack"]);
-
-            const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [interaction.member.id]);
-
-            if(wager > userDB[0][0].scritch_bucks) return interaction.reply({content: "You don't have enough scritch bucks.", ephemeral: true});
 
             const players = [interaction.member]
             players[0].wager = wager;
@@ -374,6 +374,13 @@ module.exports = {
                 if(gameCanceled) return;
                 try{
                     await sleep(500);
+
+                    //clear out previous games
+                    for await (const player of players){
+                        player.busted = false;
+                        player.surrenderer = false;
+                        player.insurance = false;
+                    }
 
                     let dealerHand = [];
                     for await (const player of players){
@@ -550,10 +557,6 @@ module.exports = {
                     }
                     const attachment3 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
                     await channel.send({ content: msg2, files: [attachment3] });
-                
-                    for (const player of players){
-                        Object.assign(player, {});
-                    }
 
                     await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
                 } catch(err){                
