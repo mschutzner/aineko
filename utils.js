@@ -20,11 +20,10 @@ module.exports = {
         }
         return array;
     },
-    getNumberId(int){
+    getEmojiIdByNumber(int){
         let emoji;
         switch(int){
             case 0:
-            default:
                 emoji = '<:zero:1000499679743709335>';
             break;
             case 1:
@@ -57,11 +56,10 @@ module.exports = {
         }
         return emoji;
     },
-    getNumberEmoji(int){
+    getEmojiByNumber(int){
         let reaction;
         switch(int){
             case 0:
-            default:
                 reaction = '0️⃣';
             break;
             case 1:
@@ -94,9 +92,9 @@ module.exports = {
         }
         return reaction;
     },
-    getNumber(int){
+    getNumberByEmoji(emoji){
         let item;
-        switch(int){
+        switch(emoji){
             case '0️⃣':
                 item = 0;
             break;
@@ -129,5 +127,5 @@ module.exports = {
             break;
         }
         return item;
-    }
+    },
 }

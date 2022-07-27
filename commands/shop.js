@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { getNumberId, getNumberEmoji, getNumber } = require("../utils.js");
+const { getEmojiIdByNumber, getEmojiByNumber, getNumberByEmoji } = require("../utils.js");
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -16,8 +16,8 @@ module.exports = {
 				ephemeral: true 
 			});
 			let msg = '';
-			for (const index in catDB[0]){
-				msg += `${getNumberId(index)} Name: ${catDB[0][index].name}, Cost: ฅ${catDB[0][index].price}, ${catDB[0][index].description} \n\n`;
+			for (let i = 0; i < catDB[0].length; i++){
+				msg += `${getEmojiIdByNumber(i)} Name: ${catDB[0][i].name}, Cost: ฅ${catDB[0][i].price}, ${catDB[0][i].description}\n`;
 			}
 			const shop = await interaction.reply({ content: `**React with a number below to buy a cat.**\n${msg}`,
 				fetchReply: true
@@ -30,7 +30,7 @@ module.exports = {
 			collector.on('collect', async (reaction, user) => {
 				reaction.users.remove(member.id);
 				
-				const index = getNumber(reaction.emoji.name);
+				const index = getNumberByEmoji(reaction.emoji.name);
 				const cat = catDB[0][index];
 				const userCatDB = await conn.query('SELECT * FROM `user_cat` WHERE `user_id` = ? AND `cat_id` = ?;', [user.id, cat._id]);
 				if(userCatDB[0].length > 0){
@@ -43,11 +43,15 @@ module.exports = {
 				await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
 					[user.id, cat._id, user.username, cat.name]);
 				await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [cat.price, user.id]);
-				channel.send({content: `<@${user.id}> has bought ${cat.name} for ฅ${cat.price}.`, files: [`images/cats/${cat.name}.jpg`]});
+				if(cat.command){
+					channel.send({content: `<@${user.id}> has bought ${cat.name} for ฅ${cat.price}. This unlocks the /${cat.command} command.`, files: [`images/cats/${cat.name}.jpg`]});
+				} else {
+					channel.send({content: `<@${user.id}> has bought ${cat.name} for ฅ${cat.price}.`, files: [`images/cats/${cat.name}.jpg`]});
+				}
 			});
 
-			for (const index in catDB[0]){
-				shop.react(getNumberEmoji(index));
+			for (let i = 0; i < catDB[0].length; i++){
+				shop.react(getEmojiByNumber(i));
 			}
 		} finally{
 			//release pool connection

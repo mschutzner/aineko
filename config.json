@@ -2,8 +2,8 @@
   "stage":  "beta",
 	"lurkerMin": 0.1,
   "memberMin": 4,
-  "regularMin": 32,
-  "championMin": 128,
+  "regularMin": 16,
+  "championMin": 64,
 	"decayRate": 0.999,
 	"tickRate": 300000,
   "facepalms": [

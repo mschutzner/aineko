@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageAttachment } = require('discord.js');
 const { createCanvas, loadImage, Image } = require('canvas');
-const { getNumberId, getNumberEmoji, getNumber } = require("../utils.js");
+const { getEmojiByNumber, getNumberByEmoji } = require("../utils.js");
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -12,10 +12,9 @@ module.exports = {
 	async execute(interaction, pool) {
 		const conn = await pool.getConnection();
 		try{
-			const member = (interaction.options.getMember('user')) ? interaction.options.getMember('user') : interaction.member;
+			const target = (interaction.options.getMember('user')) ? interaction.options.getMember('user') : interaction.target;
 			
-			const userCatDB = await conn.query('SELECT * FROM `user_cat` WHERE `user_id` = ? ORDER BY `earned_timestamp`;', [member.id]);
-
+			const userCatDB = await conn.query('SELECT * FROM `user_cat` WHERE `user_id` = ? ORDER BY `earned_timestamp`;', [target.id]);
 
 			let canvas, ctx, cat, catImage, attachment, msg, page, length;
 
@@ -38,8 +37,8 @@ module.exports = {
 
 					ctx.fillText(cat.cat_name, 26, 26);
 
-					attachment = new MessageAttachment(canvas.toBuffer(), `${member.displayName}s-cats.png`);
-					msg = await interaction.reply({ content: `${member.displayName}'s cats:`, files: [attachment] });
+					attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+					msg = await interaction.reply({ content: `${target.displayName}'s cats:`, files: [attachment] });
 				break;
 
 				case 2:
@@ -48,18 +47,18 @@ module.exports = {
 					ctx.font = '20px sans-serif';
 					ctx.fillStyle = '#ffffff';
 
-					for (const index in userCatDB[0]){
-						cat = userCatDB[0][index];
+					for (let i = 0; i < userCatDB[0].length; i++){
+						cat = userCatDB[0][i];
 
 						catImage = await loadImage(`images/cats/${cat.cat_name}.jpg`);
 	
-						ctx.drawImage(catImage, 26+index*180, 35, 128, 128);
+						ctx.drawImage(catImage, 26+i*180, 35, 128, 128);
 	
-						ctx.fillText(cat.cat_name, 26+index*180, 26);
+						ctx.fillText(cat.cat_name, 26+i*180, 26);
 					}
 	
-					attachment = new MessageAttachment(canvas.toBuffer(), `${member.displayName}s-cats.png`);
-					msg = await interaction.reply({ content: `${member.displayName}'s cats:`, files: [attachment] });
+					attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+					msg = await interaction.reply({ content: `${target.displayName}'s cats:`, files: [attachment] });
 				break;
 
 				case 3:
@@ -68,18 +67,18 @@ module.exports = {
 					ctx.font = '20px sans-serif';
 					ctx.fillStyle = '#ffffff';
 
-					for (const index in userCatDB[0]){
-						cat = userCatDB[0][index];
+					for (let i = 0; i < userCatDB[0].length; i++){
+						cat = userCatDB[0][i];
 
 						catImage = await loadImage(`images/cats/${cat.cat_name}.jpg`);
 	
-						ctx.drawImage(catImage, 26+index*180, 35, 128, 128);
+						ctx.drawImage(catImage, 26+i*180, 35, 128, 128);
 	
-						ctx.fillText(cat.cat_name, 26+index*180, 26);
+						ctx.fillText(cat.cat_name, 26+i*180, 26);
 					}
 	
-					attachment = new MessageAttachment(canvas.toBuffer(), `${member.displayName}s-cats.png`);
-					msg = await interaction.reply({ content: `${member.displayName}'s cats:`, files: [attachment] });
+					attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+					msg = await interaction.reply({ content: `${target.displayName}'s cats:`, files: [attachment] });
 				break;
 
 				case 4:
@@ -90,22 +89,22 @@ module.exports = {
 					ctx.font = '20px sans-serif';
 					ctx.fillStyle = '#ffffff';
 
-					for (const index in userCatDB[0]){
-						cat = userCatDB[0][index];
+					for (let i = 0; i < userCatDB[0].length; i++){
+						cat = userCatDB[0][i];
 
 						catImage = await loadImage(`images/cats/${cat.cat_name}.jpg`);
 	
-						ctx.drawImage(catImage, 26+(index%3)*180, 35+180*Math.floor(index/3), 128, 128);
+						ctx.drawImage(catImage, 26+(i%3)*180, 35+180*Math.floor(i/3), 128, 128);
 
-						ctx.fillText(cat.cat_name, 26+(index%3)*180, 26+180*Math.floor(index/3));
+						ctx.fillText(cat.cat_name, 26+(i%3)*180, 26+180*Math.floor(i/3));
 					}
 	
-					attachment = new MessageAttachment(canvas.toBuffer(), `${member.displayName}s-cats.png`);
-					msg = await interaction.reply({ content: `${member.displayName}'s cats:`, files: [attachment] });
+					attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+					msg = await interaction.reply({ content: `${target.displayName}'s cats:`, files: [attachment] });
 				break;
 
 				default:
-					const pages = Math.floor(userCatDB[0].length/6);
+					const pages = Math.ceil(userCatDB[0].length/6);
 
 					canvas = createCanvas(540, 360);
 					ctx = canvas.getContext('2d');
@@ -122,23 +121,25 @@ module.exports = {
 						ctx.fillText(cat.cat_name, 26+(i%3)*180, 26+180*Math.floor(i/3));
 					}
 	
-					attachment = new MessageAttachment(canvas.toBuffer(), `${member.displayName}s-cats.png`);
-					msg = await interaction.reply({ content: `${member.displayName}'s cats page 0:`,
+					attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+					msg = await interaction.reply({ content: `${target.displayName}'s cats page 0:`,
 						files: [attachment],
 						fetchReply: true 
 					});
-
-					const filter = (reaction, user) => (!user.bot && user.id == member.id);
+;					
+					const filter = (reaction, user) => (!user.bot);
 					const collector = msg.createReactionCollector({filter});
 					
 					collector.on('collect', async (reaction, user) => {
-						reaction.users.remove(member.id);
+						reaction.users.remove(user.id);
 
-						page = getNumber(reaction.emoji.name);
+						if(user.id != interaction.user.id) return;
+
+						page = getNumberByEmoji(reaction.emoji.name);
 						
 						ctx.clearRect(0, 0, canvas.width, canvas.height);
 						
-						length = (page == pages) ? userCatDB[0].length%6 : 6;
+						length = (page == pages-1) ? userCatDB[0].length%6 : 6;
 						for (let i = 0; i < length; i++){
 							cat = userCatDB[0][page*6+i];
 	
@@ -149,23 +150,23 @@ module.exports = {
 							ctx.fillText(cat.cat_name, 26+(i%3)*180, 26+180*Math.floor(i/3));
 						}
 						
-						attachment = new MessageAttachment(canvas.toBuffer(), `${member.displayName}s-cats.png`);
-						msg.edit({ content: `${member.displayName}'s cats page ${page}:`, files: [attachment] });
+						attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+						msg.edit({ content: `${target.displayName}'s cats page ${page}:`, files: [attachment] });
 					});
 
-					for (let i = 0; i <= pages; i++){
-						msg.react(getNumberEmoji(i));
+					for (let i = 0; i < pages; i++){
+						msg.react(getEmojiByNumber(i));
 					}
 				break;
 			}
 
-			// const filter = (reaction, user) => (!user.bot && user.id == member.id);
+			// const filter = (reaction, user) => (!user.bot && user.id == target.id);
 			// const collector = shop.createReactionCollector({filter});
 			
 			// collector.on('collect', async (reaction, user) => {
 			// });
 
-			// shop.react(getNumberReaction(index));
+			// shop.react(getNumberReaction(i));
 		} finally{
 			//release pool connection
 			conn.release();

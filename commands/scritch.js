@@ -19,8 +19,6 @@ module.exports = {
 	cooldown: 180000,
 	catId: 1, //aineko
 	async execute(interaction, pool) {
-		const client = interaction.client;
-		
 		const rewardIndex = randInt(rewardsTable.length-1);
 		const reward = rewardsTable[rewardIndex];
 
