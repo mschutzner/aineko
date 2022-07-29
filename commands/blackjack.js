@@ -68,7 +68,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
                             [player.id, 4, player.displayName, 'Murphy']);
                         if(userCatDB[0].affectedRows){
-                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.', files: ['images/cats/Murphy.jpg']});
+                            channel.send({content: `<@${player.id}> just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.`, files: ['images/cats/Murphy.jpg']});
                         }
                     }
 
@@ -108,7 +108,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
                             [player.id, 4, player.displayName, 'Murphy']);
                         if(userCatDB[0].affectedRows){
-                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.', files: ['images/cats/Murphy.jpg']});
+                            channel.send({content: `<@${player.id}> just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.`, files: ['images/cats/Murphy.jpg']});
                         }
                     }
         
@@ -166,7 +166,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
                             [player.id, 4, player.displayName, 'Murphy']);
                         if(userCatDB[0].affectedRows){
-                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.', files: ['images/cats/Murphy.jpg']});
+                            channel.send({content: `<@${player.id}> just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.`, files: ['images/cats/Murphy.jpg']});
                         }
                     }
        
@@ -217,7 +217,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
                         const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
                             [player.id, 4, player.displayName, 'Murphy']);
                         if(userCatDB[0].affectedRows){
-                            player.send({content: 'You just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.', files: ['images/cats/Murphy.jpg']});
+                            channel.send({content: `<@${player.id}> just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.`, files: ['images/cats/Murphy.jpg']});
                         }
                     }
     

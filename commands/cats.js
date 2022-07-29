@@ -12,7 +12,7 @@ module.exports = {
 	async execute(interaction, pool) {
 		const conn = await pool.getConnection();
 		try{
-			const target = (interaction.options.getMember('user')) ? interaction.options.getMember('user') : interaction.target;
+			const target = (interaction.options.getMember('user')) ? interaction.options.getMember('user') : interaction.member;
 			
 			const userCatDB = await conn.query('SELECT * FROM `user_cat` WHERE `user_id` = ? ORDER BY `earned_timestamp`;', [target.id]);
 

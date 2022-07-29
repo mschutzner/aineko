@@ -18,9 +18,9 @@ module.exports = {
         const ctx = canvas.getContext('2d');
         const user = (interaction.options.getMember('user')) ? interaction.options.getMember('user') : interaction.user;
         
-        const background = await Canvas.loadImage('/aineko/images/canvas.png');
+        const background = await Canvas.loadImage('images/canvas.png');
         const pfp = await Canvas.loadImage(user.displayAvatarURL({format:'png'}));
-        const overlay = await Canvas.loadImage('/aineko/images/bob.png');
+        const overlay = await Canvas.loadImage('images/bob.png');
         
         ctx.fillStyle = '#e4e4e9';
         ctx.fillRect(0,0,size,size);
