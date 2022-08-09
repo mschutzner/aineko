@@ -303,14 +303,6 @@ module.exports = {
             const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [interaction.member.id]);
             if(wager > userDB[0][0].scritch_bucks) return interaction.reply({content: "You don't have enough scritch bucks.", ephemeral: true});
 
-            //check if there is a game already running in the channel and return if so.
-            const gameDB = await conn.query('SELECT `game` FROM `game` WHERE `channel_id` = ?;', [channel.id]);
-            if(gameDB[0].length) return interaction.reply({ 
-                content: `There is already a game of ${gameDB[0][0].game} running in this channel.`,
-                ephemeral: true 
-            });
-			await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, ?);', [channel.id, "blackjack"]);
-
             const players = [interaction.member]
             players[0].wager = wager;
             await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [wager, interaction.member.id]);
@@ -378,7 +370,7 @@ module.exports = {
                     //clear out previous games
                     for await (const player of players){
                         player.busted = false;
-                        player.surrenderer = false;
+                        player.surrendered = false;
                         player.insurance = false;
                     }
 

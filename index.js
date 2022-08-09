@@ -46,6 +46,7 @@ client.on("interactionCreate", async interaction => {
 	if (!command) return;
 
 	const guild = interaction.guild;
+	const channel = interaction.channel;
 	const member = interaction.member;
 	const user = interaction.user;
 
@@ -57,47 +58,57 @@ client.on("interactionCreate", async interaction => {
 				content: "The bot is currently down for maintenance.",
 				ephemeral: true 
 			}); 
+			
+            const gameDB = await conn.query('SELECT `game` FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+            if(gameDB[0].length) 
+				return interaction.reply({ 
+					content: `There is already a game of ${gameDB[0][0].game} running in this channel.`,
+					ephemeral: true 
+           		});
 		}
+
 		if(command.catId){
 			const catDB = await conn.query('SELECT * FROM `cat` WHERE `_id` = ?;', [command.catId]);
 			if(catDB[0].length > 0){
 				const userCatDB = await conn.query('SELECT * FROM `user_cat` WHERE (`user_id`, `cat_id`) = (?, ?);', [member.id, command.catId]);
-				if(userCatDB[0].length == 0) return  interaction.reply({ 
-					content: `You need to own ${catDB[0][0].name} to use /${interaction.commandName}.`,
-					ephemeral: true 
-				}); 
+				if(userCatDB[0].length == 0)
+					return  interaction.reply({ 
+						content: `You need to own ${catDB[0][0].name} to use /${interaction.commandName}.`,
+						ephemeral: true 
+					}); 
 			}
 		}
+
 		if(command.cooldown){
 			const cooldown = client.cooldowns.find(c => c.user == user.id && c.cmd == command.data.name);
 			if(cooldown){
 				const timeRemaining = cooldown.endTime - Date.now();
 				if(timeRemaining > 60000){
 					const minutes = Math.round(timeRemaining / 60000);
-					interaction.reply({content: `You must wait ${minutes} more minutes before you can use this command again.`, ephemeral: true});
+					return  interaction.reply({content: `You must wait ${minutes} more minutes before you can use this command again.`, ephemeral: true});
 				} else {
 					const seconds = Math.round(timeRemaining / 1000);
-					interaction.reply({content: `You must wait ${seconds} more seconds before you can use this command again.`, ephemeral: true});
+					return interaction.reply({content: `You must wait ${seconds} more seconds before you can use this command again.`, ephemeral: true});
 				}
-			} else {
-				await conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
-				await command.execute(interaction, pool);
-				client.cooldowns.push({ 
-					user: user.id, 
-					cmd: command.data.name,
-					endTime: Date.now() + command.cooldown
-				});
-				setTimeout(() => {
-					for(const i in client.cooldowns){
-						const obj = client.cooldowns[i];
-						if(obj.user == user.id && obj.cmd == command.data.name) client.cooldowns.splice(i,1);
-					}
-				}, command.cooldown);
 			}
-		} else {
-			await conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
-			await command.execute(interaction, pool);
-		}
+
+			client.cooldowns.push({ 
+				user: user.id, 
+				cmd: command.data.name,
+				endTime: Date.now() + command.cooldown
+			});
+			setTimeout(() => {
+				for(const i in client.cooldowns){
+					const obj = client.cooldowns[i];
+					if(obj.user == user.id && obj.cmd == command.data.name) client.cooldowns.splice(i,1);
+				}
+			}, command.cooldown);
+		} 
+
+		await command.execute(interaction, pool);
+
+		if(command.game) await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, ?);', [channel.id, command.data.name]);
+		
 	} catch (error) {
 		console.error(error);
 		await interaction.reply({ 
@@ -190,12 +201,10 @@ const guildCreate = async (guild) => {
 				hoist: true,
 				position: hightestRole-3
 			});
-			//generate invite link
-			const invite = await guild.systemChannel.createInvite({ maxAge: 0, maxUses: 0 });
 			//add the guild to the database
 			await conn.query(
-				'INSERT IGNORE INTO `guild` (guild_id, name, member_role_id, regular_role_id, champion_role_id, invite) VALUES (?, ?, ?, ?, ?, ?);',
-				[guild.id, guild.name, memberRole.id, regularRole.id, championRole.id, invite.toString()]
+				'INSERT IGNORE INTO `guild` (guild_id, name, member_role_id, regular_role_id, champion_role_id) VALUES (?, ?, ?, ?, ?;',
+				[guild.id, guild.name, memberRole.id, regularRole.id, championRole.id]
 			);
 		}
 
@@ -279,8 +288,12 @@ client.on('messageCreate', async message => {
 
 	const conn = await pool.getConnection();
 	try{
+		//activity tracking
+		if(message.type != 'APPLICATION_COMMAND');
 		await conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
+		
 		const guildDB = await conn.query('SELECT `count_channel` FROM `guild` WHERE `guild_id` = ?;', [guild.id]);
+		//counting game
 		if(channel.id == guildDB[0][0].count_channel){
 			await sleep(2000);
 			let messages = await channel.messages.fetch({ limit: 100 });
@@ -561,39 +574,43 @@ async function activityLoop(){
 
 			const membersDB = await conn.query('SELECT * FROM `member` where `guild_id` = ?;', [guild.id]);
 			for await(const memberDB of membersDB[0]){
-				const member = await guild.members.fetch(memberDB.user_id);
-				
-				const prevActivityPoints = memberDB.activity_points;
-				let activityPoints = prevActivityPoints*decayRate;
+				try{
+					const member = await guild.members.fetch(memberDB.user_id);
 
-				if(memberDB.active){
-					activityPoints ++; 
-					if(activityPoints < memberMin) activityPoints = memberMin;
+					const prevActivityPoints = memberDB.activity_points;
+					let activityPoints = prevActivityPoints*decayRate;
+	
+					if(memberDB.active){
+						activityPoints ++; 
+						if(activityPoints < memberMin) activityPoints = memberMin;
+					}
+	
+					if(member.roles.cache.has(guildDB.member_role_id) && activityPoints < lurkerMin ){
+						await member.roles.remove(guildDB.member_role_id);
+	
+						//remove existing reaction
+						const curColor = memberDB.color_id;
+						const curColorDB = await conn.query('SELECT `emoji_id` FROM `color` WHERE `_id` = ?;', [curColor]);
+						const curColorEmojiId = curColorDB[0][0].emoji_id;
+						if(colorMsg) await colorMsg.reactions.cache.find(r => r.emoji.id == curColorEmojiId).users.remove(member.id);
+	
+						//remove existing color role
+						const curColorRoleDB = await conn.query('SELECT `role_id` FROM `color_role` WHERE `guild_id`= ? AND `color_id` = ?;',
+							[guild.id, curColor]);
+						await member.roles.remove(curColorRoleDB[0][0].role_id);
+	
+						member.send(`You're member status has lapsed on ${guild.name} because of inactivity. You can reclaim your member status by simply agreeing to the rules again by choosing a name color.`);
+					}
+					if(!member.roles.cache.has(guildDB.regular_role_id) && activityPoints > regularMin) await member.roles.add(guildDB.regular_role_id);
+					if(member.roles.cache.has(guildDB.regular_role_id) && activityPoints < regularMin) await member.roles.remove(guildDB.regular_role_id);
+					if(!member.roles.cache.has(guildDB.champion_role_id) && activityPoints > championMin) await member.roles.add(guildDB.champion_role_id);
+					if(member.roles.cache.has(guildDB.champion_role_id) && activityPoints < championMin) await member.roles.remove(guildDB.champion_role_id);
+	
+					await conn.query('UPDATE `member` SET `activity_points` = ?, `active` = 0 WHERE `guild_id` = ? AND `user_id` = ?;',
+						[activityPoints, guild.id, member.id]);
+				} catch (err){
+					continue;
 				}
-
-				if(member.roles.cache.has(guildDB.member_role_id) && activityPoints < lurkerMin ){
-					await member.roles.remove(guildDB.member_role_id);
-
-					//remove existing reaction
-					const curColor = memberDB.color_id;
-					const curColorDB = await conn.query('SELECT `emoji_id` FROM `color` WHERE `_id` = ?;', [curColor]);
-					const curColorEmojiId = curColorDB[0][0].emoji_id;
-					if(colorMsg) await colorMsg.reactions.cache.find(r => r.emoji.id == curColorEmojiId).users.remove(member.id);
-
-					//remove existing color role
-					const curColorRoleDB = await conn.query('SELECT `role_id` FROM `color_role` WHERE `guild_id`= ? AND `color_id` = ?;',
-						[guild.id, curColor]);
-					await member.roles.remove(curColorRoleDB[0][0].role_id);
-
-					member.send(`You're member status has lapsed on ${guild.name} because of inactivity. You can reclaim your member status by simply agreeing to the rules again by choosing a name color.`);
-				}
-				if(!member.roles.cache.has(guildDB.regular_role_id) && activityPoints > regularMin) await member.roles.add(guildDB.regular_role_id);
-				if(member.roles.cache.has(guildDB.regular_role_id) && activityPoints < regularMin) await member.roles.remove(guildDB.regular_role_id);
-				if(!member.roles.cache.has(guildDB.champion_role_id) && activityPoints > championMin) await member.roles.add(guildDB.champion_role_id);
-				if(member.roles.cache.has(guildDB.champion_role_id) && activityPoints < championMin) await member.roles.remove(guildDB.champion_role_id);
-
-				await conn.query('UPDATE `member` SET `activity_points` = ?, `active` = 0 WHERE `guild_id` = ? AND `user_id` = ?;',
-					[activityPoints, guild.id, member.id]);
 			}
 		}
 	} finally{
