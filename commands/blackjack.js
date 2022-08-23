@@ -49,7 +49,6 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
             if(collected.first() && collected.first().content.toLowerCase() !== 'stand'){
                 if (collected.first().content.toLowerCase() == 'surrender') {
                     player.surrendered = true;
-                    player.wager = Math.ceil(player.wager/2);
                     const attachment2 = new MessageAttachment(canvas.toBuffer(), 'blackjack-table.png');
                     await channel.send({ content: `${player.displayName} has surrendered.`, files: [attachment2] });
                     await sleep(2000);
@@ -302,6 +301,8 @@ module.exports = {
             //check if player has enough scritch bucks and return if not.
             const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [interaction.member.id]);
             if(wager > userDB[0][0].scritch_bucks) return interaction.reply({content: "You don't have enough scritch bucks.", ephemeral: true});
+
+            await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, "blackjack");', [channel.id]);
 
             const players = [interaction.member]
             players[0].wager = wager;

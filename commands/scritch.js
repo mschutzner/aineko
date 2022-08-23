@@ -29,6 +29,7 @@ module.exports = {
 		try{
 			await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ?, `scritches` = `scritches` + 1 WHERE `user_id` = ?;',
 				[reward.amt, member.id]);
+				
 			await interaction.reply(`${reward.msg}
 Aineko gives you ฅ${reward.amt}.`);
 
