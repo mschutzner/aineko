@@ -18,11 +18,19 @@ module.exports = {
 				[member.guild.id, member.id]);
 			if(memberDB[0].length < 1) return interaction.reply('You must be a member before you can use this command.');
 			if(Date.now() - memberDB[0][0].join_time > 259200000) return interaction.reply("You must choose a referrer within 3 days of joining.");
-			if(memberDB[0][0].referred_by) return interaction.reply("You have stated that you were referred by a member.");
-			await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + 200 WHERE `user_id` = ?;',
-				[referredBy.id]);
-				await conn.query('UPDATE `member` SET `referred_by` = ? WHERE `guild_id` = ? AND `user_id` = ?;',
-					[referredBy.id, member.guild.id, member.id]);
+			if(memberDB[0][0].referred_by) return interaction.reply("You have already stated that you were referred by a member.");
+
+			const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [member.id]);
+			const newScritchBucks = userDB[0][0].scritch_bucks + 200;
+			const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
+			await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+				[newScritchBucks, highestScritchBucks, member.id]);
+			conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+				[member.id, newScritchBucks, member.user.username]);
+				
+			await conn.query('UPDATE `member` SET `referred_by` = ? WHERE `guild_id` = ? AND `user_id` = ?;',
+				[referredBy.id, member.guild.id, member.id]);
+
 			interaction.reply(`Welcome to the server. ${referredBy} get's ฅ200 for referring you!`);
 		} finally{
 			//release pool connection

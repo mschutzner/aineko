@@ -16,7 +16,7 @@ module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('scritch')
 		.setDescription('Give Aineko a good scritch and maybe get something in return.'),
-	cooldown: 180000,
+	cooldown: 30000,
 	catId: 1, //aineko
 	async execute(interaction, pool) {
 		const rewardIndex = randInt(rewardsTable.length-1);
@@ -27,14 +27,19 @@ module.exports = {
 
 		const conn = await pool.getConnection();
 		try{
-			await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ?, `scritches` = `scritches` + 1 WHERE `user_id` = ?;',
-				[reward.amt, member.id]);
+			const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [member.id]);
+			const newScritchBucks = userDB[0][0].scritch_bucks + reward.amt;
+			const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
+			const numScritches = userDB[0][0].scritches + 1;
+			await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritches` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+				[newScritchBucks, numScritches, highestScritchBucks, member.id]);
+			conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+				[member.id, newScritchBucks, member.user.username]);
 				
 			await interaction.reply(`${reward.msg}
 Aineko gives you ฅ${reward.amt}.`);
 
 			//give Chubby on 10th scritch.
-			const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [member.id]);
 			if(userDB[0][0].scritches == 10){
 				const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
 					[member.id, 6, member.displayName, 'Chubby']);

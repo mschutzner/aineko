@@ -1,17 +1,18 @@
 require('dotenv').config();
 const fs = require("fs");
-const { Client, Collection, Intents } = require("discord.js");
+const { Client, Collection, GatewayIntentBits, InteractionType, ChannelType} = require("discord.js");
 const mysql = require("mysql2/promise");
 const { stage, lurkerMin, memberMin, regularMin, championMin, decayRate, tickRate, facepalms } = require("./config.json");
-const { sleep, randInt } = require("./utils.js");
+const { sleep, randInt, unixToMysqlDatetime } = require("./utils.js");
 
 // Create a new client instance
 const client = new Client({ 
 	intents: [
-		Intents.FLAGS.GUILDS, 
-		Intents.FLAGS.GUILD_MEMBERS, 
-		Intents.FLAGS.GUILD_MESSAGES,
-		Intents.FLAGS.GUILD_MESSAGE_REACTIONS
+		GatewayIntentBits.Guilds, 
+		GatewayIntentBits.GuildMembers, 
+		GatewayIntentBits.GuildMessages,
+		GatewayIntentBits.GuildMessageReactions,
+		GatewayIntentBits.MessageContent
 	],
 	partials: ['MESSAGE', 'CHANNEL', 'REACTION']
 });
@@ -39,7 +40,7 @@ for (const file of commandFiles) {
 client.cooldowns = [];
 
 client.on("interactionCreate", async interaction => {
-	if (!interaction.isCommand()) return;
+	if (interaction.type !== InteractionType.ApplicationCommand) return;
 
 	const command = client.commands.get(interaction.commandName);
 
@@ -80,9 +81,12 @@ client.on("interactionCreate", async interaction => {
 		}
 
 		if(command.cooldown){
-			const cooldown = client.cooldowns.find(c => c.user == user.id && c.cmd == command.data.name);
-			if(cooldown){
-				const timeRemaining = cooldown.endTime - Date.now();
+			const timerDB = await conn.query('SELECT * FROM `command_timer` WHERE `user_id` = ? AND `guild_id` = ? AND `command_name` = ?;',
+				[user.id, guild.id, command.data.name]);
+
+			if(timerDB[0].length > 0){
+				const prevEndTime = timerDB[0][0].end_time.getTime();
+				const timeRemaining = prevEndTime - Date.now();
 				if(timeRemaining > 3600000 ){
 					const hours = Math.round(timeRemaining / 3600000 );
 					return  interaction.reply({content: `You must wait ${hours} more hours before you can use this command again.`, ephemeral: true});
@@ -90,22 +94,19 @@ client.on("interactionCreate", async interaction => {
 				if(timeRemaining > 60000){
 					const minutes = Math.round(timeRemaining / 60000);
 					return  interaction.reply({content: `You must wait ${minutes} more minutes before you can use this command again.`, ephemeral: true});
-				} else {
+				} else if(timeRemaining > 0) {
 					const seconds = Math.round(timeRemaining / 1000);
 					return interaction.reply({content: `You must wait ${seconds} more seconds before you can use this command again.`, ephemeral: true});
 				}
 			}
 
-			client.cooldowns.push({ 
-				user: user.id, 
-				cmd: command.data.name,
-				endTime: Date.now() + command.cooldown
-			});
-			setTimeout(() => {
-				for(const i in client.cooldowns){
-					const obj = client.cooldowns[i];
-					if(obj.user == user.id && obj.cmd == command.data.name) client.cooldowns.splice(i,1);
-				}
+			const endTime = unixToMysqlDatetime(Date.now() + command.cooldown);
+			await conn.query('INSERT INTO `command_timer` (user_id, guild_id, command_name, end_time) VALUES (?, ?, ?, ?);',
+				[user.id, guild.id, command.data.name, endTime]);
+
+			setTimeout(async () => {
+				await conn.query('DELETE FROM `command_timer` WHERE `user_id` = ? AND `guild_id` = ? AND `command_name` = ?;',
+					[user.id, guild.id, command.data.name]);
 			}, command.cooldown);
 		} 
 
@@ -128,7 +129,7 @@ client.on('messageCreate', async message => {
 	if (message.partial) await message.fetch();
 
 	//ignore non guild channel message
-	if(message.channel.type !== 'GUILD_TEXT') return;
+	if(message.channel.type !== ChannelType.GuildText) return;
 
 	//ignore bots
 	if (message.author.bot) return;
@@ -184,7 +185,15 @@ client.on('messageCreate', async message => {
 				messages = [...messages.values()];
 				for (const msg of messages){
 					if(players.includes(msg.author.id)) continue;
-					conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + 200 WHERE `user_id` = ?;', [msg.author.id]);
+					
+					const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [msg.author.id]);
+					const newScritchBucks = userDB[0][0].scritch_bucks + 100;
+					const highestScritchBucks = (newScritchBucks > userDB[0][0].highest_scritch_bucks) ? newScritchBucks : userDB[0][0].highest_scritch_bucks;
+					await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `highest_scritch_bucks` = ? WHERE `user_id` = ?;', 
+						[newScritchBucks, highestScritchBucks, msg.author.id]);
+					conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+						[msg.author.id, newScritchBucks, msg.author.username]);
+
 					players.push(msg.author.id);
 				}
 				await channel.send({content: 'Great job! You all get ฅ200. New game starting now. Messages must be the next number and you must wait two members between messages. Tupperbox messages always counts as the same member.', files: [`images/success-kid.gif`] });
@@ -655,6 +664,29 @@ async function questionLoop(){
 	}, questionTime - curTime);
 }
 
+async function timerSetup(){
+	const conn = await pool.getConnection();
+	try{
+		const commandTimerDB = await conn.query('SELECT * FROM `command_timer`;');
+		
+		for await(const commandTimer of commandTimerDB[0]){
+			const timeRemaining = commandTimer.end_time - Date.now();
+
+			if(timeRemaining > 0){
+				setTimeout(async () => {
+					await conn.query('DELETE FROM `command_timer` WHERE `user_id` = ? AND `guild_id` = ? AND `command_name` = ?;',
+						[commandTimer.user_id, commandTimer.guild_id, commandTimer.command_name]);
+				}, timeRemaining);
+			} else {
+				await conn.query('DELETE FROM `command_timer` WHERE `user_id` = ? AND `guild_id` = ? AND `command_name` = ?;',
+					[commandTimer.user_id, commandTimer.guild_id, commandTimer.command_name]);
+			}
+		}	
+	} finally{
+		//release pool connection
+		conn.release();
+	}
+}
 
 // Login to Discord with your client's token
 client.once("ready", async () => {
@@ -715,6 +747,8 @@ client.once("ready", async () => {
 	// activityLoop();
 	
 	questionLoop();
+
+	timerSetup();
 
 	const startMsg = (stage == 'production') ? 'Aineko is ready!' : 'Aineko Beta is ready!';
 	console.log(startMsg);

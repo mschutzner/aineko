@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { MessageAttachment } = require('discord.js');
+const { AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage, Image } = require('canvas');
 const { getEmojiByNumber, getNumberByEmoji } = require("../utils.js");
 
@@ -8,7 +8,8 @@ module.exports = {
 		.setName('cats')
 		.setDescription('Show off your cats collection!')
         .addUserOption(option => option.setName('user')
-            .setDescription('The user to view the cats of.')),
+            .setDescription('The user to view the cats of.')
+		),
 	async execute(interaction, pool) {
 		const conn = await pool.getConnection();
 		try{
@@ -37,7 +38,7 @@ module.exports = {
 
 					ctx.fillText(cat.cat_name, 26, 26);
 
-					attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+					attachment = new AttachmentBuilder(canvas.toBuffer(), { name: `${target.displayName}'s-cats.png`});
 					msg = await interaction.reply({ content: `${target.displayName}'s cats:`, files: [attachment] });
 				break;
 
@@ -57,7 +58,7 @@ module.exports = {
 						ctx.fillText(cat.cat_name, 26+i*180, 26);
 					}
 	
-					attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+					attachment = new AttachmentBuilder(canvas.toBuffer(), { name: `${target.displayName}'s-cats.png`});
 					msg = await interaction.reply({ content: `${target.displayName}'s cats:`, files: [attachment] });
 				break;
 
@@ -77,7 +78,7 @@ module.exports = {
 						ctx.fillText(cat.cat_name, 26+i*180, 26);
 					}
 	
-					attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+					attachment = new AttachmentBuilder(canvas.toBuffer(), { name: `${target.displayName}'s-cats.png`});
 					msg = await interaction.reply({ content: `${target.displayName}'s cats:`, files: [attachment] });
 				break;
 
@@ -99,7 +100,7 @@ module.exports = {
 						ctx.fillText(cat.cat_name, 26+(i%3)*180, 26+180*Math.floor(i/3));
 					}
 	
-					attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+					attachment = new AttachmentBuilder(canvas.toBuffer(), { name: `${target.displayName}'s-cats.png`});
 					msg = await interaction.reply({ content: `${target.displayName}'s cats:`, files: [attachment] });
 				break;
 
@@ -121,7 +122,7 @@ module.exports = {
 						ctx.fillText(cat.cat_name, 26+(i%3)*180, 26+180*Math.floor(i/3));
 					}
 	
-					attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+					attachment = new AttachmentBuilder(canvas.toBuffer(), { name: `${target.displayName}'s-cats.png`});
 					msg = await interaction.reply({ content: `${target.displayName}'s cats page 0:`,
 						files: [attachment],
 						fetchReply: true 
@@ -150,7 +151,7 @@ module.exports = {
 							ctx.fillText(cat.cat_name, 26+(i%3)*180, 26+180*Math.floor(i/3));
 						}
 						
-						attachment = new MessageAttachment(canvas.toBuffer(), `${target.displayName}s-cats.png`);
+						attachment = new AttachmentBuilder(canvas.toBuffer(), { name: `${target.displayName}'s-cats.png`});
 						msg.edit({ content: `${target.displayName}'s cats page ${page}:`, files: [attachment] });
 					});
 

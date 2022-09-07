@@ -1,5 +1,7 @@
+const { Image } = require('canvas');
+
 module.exports = {
-    sleep(m){ return new Promise(r => setTimeout(r, m))},
+    sleep(m){ return new Promise(resolve => setTimeout(resolve, m))},
     randInt(max, min){
         min = min || 0;
         return min + Math.round(Math.random() * (max - min));
@@ -127,5 +129,9 @@ module.exports = {
             break;
         }
         return item;
+    },
+    unixToMysqlDatetime(unixTime){
+        const mysqlTime = new Date(unixTime).toISOString().slice(0, 19).replace('T', ' ');
+        return mysqlTime;
     },
 }

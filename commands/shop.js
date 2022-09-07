@@ -42,8 +42,16 @@ module.exports = {
 				}
 				await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
 					[user.id, cat._id, user.username, cat.name]);
-				await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [cat.price, user.id]);
+
+				const newScritchBucks = userDB[0][0].scritch_bucks - cat.price;
+				const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
+				await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+					[newScritchBucks, highestScritchBucks, member.id]);
+				conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+					[member.id, newScritchBucks, member.user.username]);
+
 				if(cat.command){
+
 					channel.send({content: `<@${user.id}> has bought ${cat.name} for ฅ${cat.price}. This unlocks the /${cat.command} command.`, files: [`images/cats/${cat.name}.jpg`]});
 				} else {
 					channel.send({content: `<@${user.id}> has bought ${cat.name} for ฅ${cat.price}.`, files: [`images/cats/${cat.name}.jpg`]});
