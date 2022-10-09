@@ -519,7 +519,7 @@ module.exports = {
                                 msg2 += `${player.displayName} lost ฅ${loss}.\n`;
                                 
                                 const newScritchBucks = userDB[0][0].scritch_bucks + player.wager-loss;
-                                await conn.query('UPDATE `user` SET `scritch_bucks` = ?, WHERE `user_id` = ?;', 
+                                await conn.query('UPDATE `user` SET `scritch_bucks` = ? WHERE `user_id` = ?;', 
                                     [newScritchBucks, player.id]);
                                 conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
                                     [player.id, newScritchBucks, player.user.username]);
@@ -551,7 +551,7 @@ module.exports = {
                                 msg2 += `${player.displayName} lost ฅ${loss}.\n`;
 
                                 const newScritchBucks = userDB[0][0].scritch_bucks + player.wager-loss;
-                                await conn.query('UPDATE `user` SET `scritch_bucks` = ?, WHERE `user_id` = ?;', 
+                                await conn.query('UPDATE `user` SET `scritch_bucks` = ? WHERE `user_id` = ?;', 
                                     [newScritchBucks, player.id]);
                                 conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
                                     [player.id, newScritchBucks, player.user.username]);

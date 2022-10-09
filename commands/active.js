@@ -12,6 +12,8 @@ module.exports = {
 
 		const conn = await pool.getConnection();
 		try{
+			await conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, interaction.member.id]);
+
 			const memberDB = await conn.query('SELECT * FROM `member` WHERE `guild_id` = ? AND (`active` = 1 OR `prev_active` = 1);', [guild.id]);
 
 			for await (const member of memberDB[0]){

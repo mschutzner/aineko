@@ -21,7 +21,7 @@ module.exports = {
 			if(memberDB[0][0].referred_by) return interaction.reply("You have already stated that you were referred by a member.");
 
 			const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [member.id]);
-			const newScritchBucks = userDB[0][0].scritch_bucks + 200;
+			const newScritchBucks = userDB[0][0].scritch_bucks + 1000;
 			const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
 			await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
 				[newScritchBucks, highestScritchBucks, member.id]);
@@ -31,7 +31,7 @@ module.exports = {
 			await conn.query('UPDATE `member` SET `referred_by` = ? WHERE `guild_id` = ? AND `user_id` = ?;',
 				[referredBy.id, member.guild.id, member.id]);
 
-			interaction.reply(`Welcome to the server. ${referredBy} get's ฅ200 for referring you!`);
+			interaction.reply(`Welcome to the server. ${referredBy} get's ฅ1000 for referring you!`);
 		} finally{
 			//release pool connection
 			conn.release();

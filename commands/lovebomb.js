@@ -19,6 +19,8 @@ module.exports = {
 		const conn = await pool.getConnection();
 		try{
 			const member = interaction.member;
+			
+			await conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
 
 			const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?', [member.id]);
 			const newScritchBucks = userDB[0][0].scritch_bucks + 100;
@@ -30,21 +32,21 @@ module.exports = {
 
 			const memberDB = await conn.query('SELECT * FROM `member` WHERE `guild_id` = ? AND (`active` = 1 OR `prev_active` = 1);', [guild.id]);
 
-			for await (const member of memberDB[0]){
-				if(member.user_id == member.id) continue;
+			for await (const mem of memberDB[0]){
+				if(mem.user_id == member.id) continue;
 
 				allText = 'all ';
 				let eachText = ' each';
 
-				memberList += `, <@${member.user_id}>`
+				memberList += `, <@${mem.user_id}>`
 
-				const userDB2 = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [member.user_id]);
+				const userDB2 = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [mem.user_id]);
 				const newScritchBucks2 = userDB2[0][0].scritch_bucks + 100;
 				const highestScritchBucks2 = (newScritchBucks2 > userDB2[0][0].scritch_bucks_highscore) ? newScritchBucks2 : userDB2[0][0].scritch_bucks_highscore;
 				await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-					[newScritchBucks2, highestScritchBucks2, member.user_id]);
+					[newScritchBucks2, highestScritchBucks2, mem.user_id]);
 				conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-					[member.user_id, newScritchBucks2, member.user.username]);
+					[mem.user_id, newScritchBucks2, mem.name]);
 			}
 
 			await interaction.reply(`${memberList} ${allText}got 100 scritch bucks${ eachText}!`);
