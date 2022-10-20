@@ -16,8 +16,18 @@ module.exports = {
 		const target = interaction.options.getMember('user');
 		const amt = interaction.options.getInteger('amount');
 
-		if(target.id == interaction.client.user.id) return interaction.reply("You can't give Aineko scritch bucks.");
-		if(target.id == member.id) return interaction.reply("You can't give yourself scritch bucks.");
+		if(amt <= 0 ) return interaction.reply({ 
+			content: "Amount must be positive.",
+			ephemeral: true 
+		});
+		if(target.id == interaction.client.user.id) return interaction.reply({ 
+			content: "You can't give Aineko scritch bucks.",
+			ephemeral: true 
+		});
+		if(target.id == member.id) return interaction.reply({ 
+			content: "You can't give yourself scritch bucks.",
+			ephemeral: true 
+		});
 
 		const conn = await pool.getConnection();
 		try{

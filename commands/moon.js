@@ -20,7 +20,7 @@ module.exports = {
 				.setRequired(false))
 		.addIntegerOption(option =>
 			option.setName('year')
-				.setDescription("The year. Responses with two digits default to 1900 to 1999.")
+				.setDescription("The full year.")
 				.setRequired(false)),
 	catId: 5, //Luna
 	async execute(interaction, pool) {
@@ -33,6 +33,7 @@ module.exports = {
 		
 		const curDate = new Date();
 		const date = (month) ? new Date(year, month-1, day) : curDate;
+		date.setUTCFullYear(year);
 
 		const lunarMonth = 29.530588853;
 		const time = date.getTime();
@@ -61,7 +62,7 @@ module.exports = {
 			return interaction.reply("It is currently a new moon.🌑");
 		} else if(date  < curDate){
 			if (age < 1.84566)
-				return interaction.reply(`On ${date.toLocaleString("en-us", { month: "long" })} ${date.getDate()}, ${date.getFullYear()} it was be a new moon.🌑`);
+				return interaction.reply(`On ${date.toLocaleString("en-us", { month: "long" })} ${date.getDate()}, ${date.getFullYear()} it was a new moon.🌑`);
 			else if (age < 5.53699)
 				return interaction.reply(`On ${date.toLocaleString("en-us", { month: "long" })} ${date.getDate()}, ${date.getFullYear()} the moon was a waxing crescent.🌒`);
 			else if (age < 9.22831)
@@ -77,7 +78,7 @@ module.exports = {
 			else if (age < 27.68493)
 				return interaction.reply(`On ${date.toLocaleString("en-us", { month: "long" })} ${date.getDate()}, ${date.getFullYear()} the moon was a waning crescent.🌘`);
 				
-			return interaction.reply(`On ${date.toLocaleString("en-us", { month: "long" })} ${date.getDate()}, ${date.getFullYear} the moon was a new moon.🌑`);
+			return interaction.reply(`On ${date.toLocaleString("en-us", { month: "long" })} ${date.getDate()}, ${date.getFullYear()} the moon was a new moon.🌑`);
 		} else {
 			if (age < 1.84566)
 				return interaction.reply(`On ${date.toLocaleString("en-us", { month: "long" })} ${date.getDate()}, ${date.getFullYear()} it will be a new moon.🌑`);

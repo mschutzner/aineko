@@ -157,7 +157,6 @@ client.on('messageCreate', async message => {
 				const prevNum = Number(messages[i-1].content);
 				const num = Number(messages[i].content);
 				if(prevNum == 100) hundread = true;
-				console.log(hundread);
 				if(isNaN(prevNum) || isNaN(num)|| prevNum != num+1){
 					wrongNum = true;
 					break;
@@ -186,8 +185,10 @@ client.on('messageCreate', async message => {
 				messages = [...messages.values()];
 				for (const msg of messages){
 					if(players.includes(msg.author.id)) continue;
-					
+
 					const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [msg.author.id]);
+					if(!userDB[0][0]) continue;
+					
 					const newScritchBucks = userDB[0][0].scritch_bucks + 200;
 					const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
 					await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;', 
