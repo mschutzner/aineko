@@ -32,8 +32,8 @@ module.exports = {
 			return interaction.reply({content: 'Please include complete date.', ephemeral: true});
 		
 		const curDate = new Date();
-		const date = (month) ? new Date(year, month-1, day) : curDate;
-		date.setUTCFullYear(year);
+		const date = new Date();;
+		if(year) date.setUTCFullYear(year, month-1, day);
 
 		const lunarMonth = 29.530588853;
 		const time = date.getTime();
@@ -42,7 +42,7 @@ module.exports = {
 		const percent = normalize((julianDate - 2451550.1) / lunarMonth);
 		const age = percent * lunarMonth;
 
-		if(date == curDate){
+		if(!year){
 			if (age < 1.84566)
 				return interaction.reply("It is currently a new moon.🌑");
 			else if (age < 5.53699)
@@ -60,7 +60,7 @@ module.exports = {
 			else if (age < 27.68493)
 				return interaction.reply("The moon is currently a waning crescent.🌘");
 			return interaction.reply("It is currently a new moon.🌑");
-		} else if(date  < curDate){
+		} else if(date < curDate){
 			if (age < 1.84566)
 				return interaction.reply(`On ${date.toLocaleString("en-us", { month: "long" })} ${date.getDate()}, ${date.getFullYear()} it was a new moon.🌑`);
 			else if (age < 5.53699)

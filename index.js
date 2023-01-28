@@ -207,9 +207,10 @@ client.on('messageCreate', async message => {
 		conn.release();
 	}
 
-	if(message.content.toLowerCase().includes('uwu')) message.channel.send('UwU');
-});
+	if(message.content.toLowerCase().includes('uwu')) message.channel.send('UwU')
+	else if (message.content.toLowerCase().includes('owo')) message.channel.send('OWO Bwaah! get out of my face!');
 
+});
 
 
 client.on('messageReactionAdd', async (reaction, user) => {
@@ -637,25 +638,25 @@ async function questionLoop(){
 	if (questionTime.getHours() >= 14) questionTime.setDate(questionTime.getDate() + 1);
 	questionTime.setHours(14, 0, 0, 0);
 	questionTime = questionTime.getTime();
-
+	
 	const curTime = new Date().getTime();
 
 	setTimeout(async () => {
 		const conn = await pool.getConnection();
 		try{
-			const sqlDate = new Date().toISOString().slice(0, 10);
-			const questionDB = await conn.query('SELECT * FROM `question` WHERE `date` = ?;', [sqlDate]);
+			const questionDB = await conn.query('SELECT * FROM `question` WHERE `asked` = 0;');
 
 			if(questionDB[0].length < 1){
 				console.error("No question of the day!");
 			} else {
 				const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1;');
 				for await(const guildDB of guildsDB[0]){
-					if(!guildDB.question_channel) return;
+					if(!guildDB.question_channel) continue;
 					const guild = await client.guilds.fetch(guildDB.guild_id);
 					const channel = await guild.channels.fetch(guildDB.question_channel);
 					channel.send(`It's now <t:${questionTime/1000}> and it's time for the **question of the day!** \`\`\`${questionDB[0][0].question}\`\`\``);
 				}
+				await conn.query('UPDATE `question` SET `asked` = 1 WHERE `_id` = ?;', [questionDB[0][0]._id]);
 			}
 		} finally{
 			//release pool connection

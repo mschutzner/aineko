@@ -30,10 +30,10 @@ module.exports = {
 			const scritchGraph = await loadImage("images/scritch-graph.png");
 			ctx.drawImage(scritchGraph, 0, 0);		
 
-			ctx.font = '20px sans-serif';
+			ctx.font = '20px Helvetica';
 			ctx.fillText(userDB[0][0].scritch_bucks_highscore, 150, 40);
 
-			ctx.font = '20px sans-serif';
+			ctx.font = '20px Helvetica';
 			ctx.fillText(userDB[0][0].scritch_bucks, 565, 40);
 	
 			const hours =  interaction.options.getNumber('hours')
@@ -41,7 +41,7 @@ module.exports = {
 			const curTime = new Date().getTime();
 			const startTime = curTime - timeScale;
 
-			ctx.font = '15px sans-serif';
+			ctx.font = '15px Helvetica';
 			for ( let i = 0; i < 7; i++){
 				const time = hours-hours/6*i;
 				ctx.fillText(`t-${time.toFixed(2)}`, 5+i*100, 500);
@@ -79,7 +79,7 @@ module.exports = {
 				let prevAmount = startScritch;
 				
 				let firstTick = largestDifference+startScritch;
-				ctx.font = '15px sans-serif';
+				ctx.font = '15px Helvetica';
 				for ( let i = 0; i < 7; i++){
 					ctx.fillText(Math.round(firstTick-tickScale*i), 645, 83+64*i);
 				}

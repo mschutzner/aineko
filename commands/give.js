@@ -20,7 +20,7 @@ module.exports = {
 			content: "Amount must be positive.",
 			ephemeral: true 
 		});
-		if(target.id == interaction.client.user.id) return interaction.reply({ 
+		if(target.user.bot) return interaction.reply({ 
 			content: "You can't give Aineko scritch bucks.",
 			ephemeral: true 
 		});

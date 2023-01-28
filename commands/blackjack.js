@@ -294,6 +294,11 @@ module.exports = {
         const channel = interaction.channel;
 
         const wager = interaction.options.getInteger('wager');
+        
+        if(wager <= 0 ) return interaction.reply({ 
+			content: "Wager must be positive.",
+			ephemeral: true 
+		});
 
         const conn = await pool.getConnection();
 		try{
