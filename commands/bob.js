@@ -1,4 +1,4 @@
-const Discord = require('discord.js');
+const { AttachmentBuilder } = require('discord.js');
 const Canvas = require('canvas');
 const PerspT = require('perspective-transform');
 const Chroma = require('chroma-js');
@@ -11,15 +11,16 @@ module.exports = {
         .setDescription('Bob Ross paints a pretty little profile picture.')
         .addUserOption(option => option.setName('user')
             .setDescription('The user to be painted.')),
+    catId: 3, //bob
     async execute(interaction) {
         const size = 256;
         const canvas = Canvas.createCanvas(size, size);
         const ctx = canvas.getContext('2d');
         const user = (interaction.options.getMember('user')) ? interaction.options.getMember('user') : interaction.user;
         
-        const background = await Canvas.loadImage('/aineko/images/canvas.png');
-        const pfp = await Canvas.loadImage(user.displayAvatarURL({format:'png'}));
-        const overlay = await Canvas.loadImage('/aineko/images/bob.png');
+        const background = await Canvas.loadImage('images/canvas.png');
+        const pfp = await Canvas.loadImage(user.displayAvatarURL().replace('webp', 'png'));
+        const overlay = await Canvas.loadImage('images/bob.png');
         
         ctx.fillStyle = '#e4e4e9';
         ctx.fillRect(0,0,size,size);
@@ -122,8 +123,7 @@ module.exports = {
         
         ctx.drawImage(overlay, 0 ,0, size, size);
         
-        const attachment = new Discord.MessageAttachment(canvas.toBuffer(), 'bob' + user.displayName + '.jpg');
-        
-        interaction.reply({files: [attachment]});
+        const attachment = new AttachmentBuilder(canvas.toBuffer(), { name:  'bob' + user.displayName + '.jpg' });
+        await interaction.reply({ files: [attachment] });
     }
 }

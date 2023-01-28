@@ -1,0 +1,16 @@
+{
+  "stage":  "production",
+	"lurkerMin": 0.1,
+  "memberMin": 4,
+  "regularMin": 16,
+  "championMin": 64,
+	"decayRate": 0.999,
+	"tickRate": 300000,
+  "facepalms": [
+    "images/facepalm/facepalm-gordon.gif",
+    "images/facepalm/facepalm-interesting.gif",
+    "images/facepalm/facepalm-judy.gif",
+    "images/facepalm/facepalm-picard.gif",
+    "images/facepalm/facepalm-michael.gif"
+  ]
+}

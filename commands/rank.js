@@ -13,8 +13,9 @@ module.exports = {
 			const membersDB = await conn.query('SELECT `user_id`, `activity_points` FROM `member` WHERE `guild_id` = ?  ORDER BY `activity_points` DESC;',
 				[interaction.guild.id]);
 			for(let i = 0; i < membersDB[0].length; i++){
+				const activityPoints = Math.floor(membersDB[0][i].activity_points);
 				if(membersDB[0][i].user_id == member.id){
-					interaction.reply(`${member.displayName} is rank ${i+1} with ${membersDB[0][i].activity_points} activity points.`);
+					interaction.reply(`${member.displayName} is rank ${i+1} with ${activityPoints} activity points.`);
 					return;
 				}
 			}
