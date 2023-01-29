@@ -20,6 +20,7 @@ const client = new Client({
 //create mysql2 pool
 const pool = mysql.createPool({
 	host: process.env.MYSQL_HOST,
+	port: '/var/run/mysqld/mysqld.sock',
 	user: process.env.MYSQL_USER,
 	database: process.env.MYSQL_DB,
 	password: process.env.MYSQL_PASSWORD,
