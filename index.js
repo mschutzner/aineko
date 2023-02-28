@@ -650,14 +650,18 @@ async function questionLoop(){
 			if(questionDB[0].length < 1){
 				console.error("No question of the day!");
 			} else {
+				//random question.
+				const questionId = Math.floor(Math.random() * questionDB[0].length) 
+
 				const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1;');
 				for await(const guildDB of guildsDB[0]){
 					if(!guildDB.question_channel) continue;
+					
 					const guild = await client.guilds.fetch(guildDB.guild_id);
 					const channel = await guild.channels.fetch(guildDB.question_channel);
-					channel.send(`It's now <t:${questionTime/1000}> and it's time for the **question of the day!** \`\`\`${questionDB[0][0].question}\`\`\``);
+					channel.send(`It's now <t:${questionTime/1000}> and it's time for the **question of the day!** \`\`\`${questionDB[0][questionId].question}\`\`\``);
 				}
-				await conn.query('UPDATE `question` SET `asked` = 1 WHERE `_id` = ?;', [questionDB[0][0]._id]);
+				await conn.query('UPDATE `question` SET `asked` = 1 WHERE `_id` = ?;', [questionDB[0][questionId]._id]);
 			}
 		} finally{
 			//release pool connection
