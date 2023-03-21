@@ -35,28 +35,42 @@ module.exports = {
         .then(async collected => {
           const waitingmsg = await interaction.channel.send('Generating image. This could take some time...');
 
-          const newScritchBucks = userDB[0][0].scritch_bucks - 100;
-          const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
-          await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-            [newScritchBucks, highestScritchBucks, member.id]);
-          conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-            [member.id, newScritchBucks, member.user.username]);
-
           const configuration = new Configuration({
             apiKey: process.env.OPENAI_API_KEY,
           });
           const openai = new OpenAIApi(configuration);
-          const response = await openai.createImage({
-            prompt: text,
-            n: 1,
-            size: "1024x1024",
-          });
+
+
+          try {
+            const response = await openai.createImage({
+              prompt: text,
+              n: 1,
+              size: "1024x1024",
+            });
+          } catch (error) {
+            if (error.response) {
+              msg.delete();
+              waitingmsg.delete();
+              return interaction.followUp(error.response.data.error.message);
+            } else {
+              msg.delete();
+              waitingmsg.delete();
+              return interaction.followUp(error.message);
+            }
+          }
 
           msg.delete();
           waitingmsg.delete();
 
           const attachment = new AttachmentBuilder(response.data.data[0].url, { name: 'openai-response.png' });
           await interaction.channel.send({content: `<@${member.id}> generated *"${text}"*`, files: [attachment]});
+
+          const newScritchBucks = userDB[0][0].scritch_bucks - 100;
+          const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
+          await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+            [newScritchBucks, highestScritchBucks, member.id]);
+          conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+            [member.id, newScritchBucks, member.user.username]);
         })
 
   } finally{
