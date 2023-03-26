@@ -47,6 +47,20 @@ module.exports = {
               n: 1,
               size: "1024x1024",
             });
+
+            msg.delete();
+            waitingmsg.delete();
+
+            const attachment = new AttachmentBuilder(response.data.data[0].url, { name: 'openai-response.png' });
+            await interaction.channel.send({content: `<@${member.id}> generated *"${text}"*`, files: [attachment]});
+
+            const newScritchBucks = userDB[0][0].scritch_bucks - 100;
+            const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
+            await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+              [newScritchBucks, highestScritchBucks, member.id]);
+            conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+              [member.id, newScritchBucks, member.user.username]);
+              
           } catch (error) {
             if (error.response) {
               msg.delete();
@@ -58,19 +72,6 @@ module.exports = {
               return interaction.followUp(error.message);
             }
           }
-
-          msg.delete();
-          waitingmsg.delete();
-
-          const attachment = new AttachmentBuilder(response.data.data[0].url, { name: 'openai-response.png' });
-          await interaction.channel.send({content: `<@${member.id}> generated *"${text}"*`, files: [attachment]});
-
-          const newScritchBucks = userDB[0][0].scritch_bucks - 100;
-          const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
-          await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-            [newScritchBucks, highestScritchBucks, member.id]);
-          conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-            [member.id, newScritchBucks, member.user.username]);
         })
 
   } finally{

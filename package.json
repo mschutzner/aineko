@@ -1,6 +1,6 @@
 {
   "name": "aineko",
-  "version": "1.3.3",
+  "version": "2023.03.25",
   "description": "A general purpose discord bot with cat like features!",
   "main": "index.js",
   "scripts": {
