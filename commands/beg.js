@@ -19,7 +19,7 @@ module.exports = {
 			conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 				[member.id, newScritchBucks, member.user.username]);
 				
-			interaction.reply("You're a good boy! You get ฅ32.");
+			interaction.reply("You're a good human! You get ฅ32.");
 		} finally{
 			//release pool connection
 			conn.release();

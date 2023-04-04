@@ -42,7 +42,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
             const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
             await channel.send({ content: `It is <@${player.id}>'s turn. They have 30 seconds to reply with hit, stand, double down, or surrender.`, files: [attachment] });
             
-            const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|stand|surrender|double down/i);
+            const filter = msg => msg.author.id == player.id && msg.content.match(/^(hit|stand|surrender|double down)/i);
             const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
             
             if(collected.first() && collected.first().content.toLowerCase() !== 'stand'){
@@ -144,9 +144,8 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
             const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
             await channel.send({ content: `It is <@${player.id}>'s turn. They have 30 seconds to reply with hit, stand, or surrender.`, files: [attachment] });
             
-            const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|stand|surrender/i);
+            const filter = msg => msg.author.id == player.id && msg.content.match(/^(hit|stand|surrender)/i);
             const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
-            
             if(collected.first() && collected.first().content.toLowerCase() !== 'stand'){
                 if (collected.first().content.toLowerCase() == 'surrender') {
                     player.surrendered = true;
@@ -203,7 +202,7 @@ async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
         const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
         await channel.send({ content: `It is <@${player.id}>'s turn. They have 30 seconds to reply with hit or stand.`, files: [attachment] });
         
-        const filter = msg => msg.author.id == player.id && msg.content.match(/^hit|stand/i);
+        const filter = msg => msg.author.id == player.id && msg.content.match(/^(hit|stand)/i);
     
         const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
         if(collected.first() && collected.first().content.toLowerCase() == 'hit'){
@@ -446,7 +445,7 @@ module.exports = {
                             const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
                             await channel.send({ content: `<@${player.id}>, do you want insurance? Reply with yes or no.`, files: [attachment] });
     
-                            const filter = msg => msg.author.id == player.id && msg.content.match(/^yes|no/i);
+                            const filter = msg => msg.author.id == player.id && msg.content.match(/^(yes|no)/i);
     
                             const collected = await channel.awaitMessages({ filter, max: 1, time: 20000 });
 
