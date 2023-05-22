@@ -132,11 +132,5 @@ module.exports = {
     },
     unixToMysqlDatetime(unixTime){
         return new Date(unixTime).toISOString().slice(0, 19).replace('T', ' ');
-    },
-    mysqlGmtStrToJSDate(str) {
-        const t = str.split(/[- :]/);
-
-        // Apply each element to the Date function
-        return new Date(t[0], t[1]-1, t[2], t[3], t[4], t[5]);
     }
 }

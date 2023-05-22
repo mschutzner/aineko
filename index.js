@@ -3,7 +3,7 @@ const fs = require("fs");
 const { Client, Collection, GatewayIntentBits, InteractionType, ChannelType} = require("discord.js");
 const mysql = require("mysql2/promise");
 const { stage, lurkerMin, memberMin, regularMin, championMin, decayRate, tickRate, facepalms } = require("./config.json");
-const { sleep, randInt, unixToMysqlDatetime, mysqlGmtStrToJSDate } = require("./utils.js");
+const { sleep, randInt, unixToMysqlDatetime} = require("./utils.js");
 
 // Create a new client instance
 const client = new Client({ 
@@ -61,10 +61,9 @@ client.on("interactionCreate", async interaction => {
 				ephemeral: true 
 			}); 
 			
-            const gameDB = await conn.query('SELECT `game` FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+            const gameDB = await conn.query('SELECT * FROM `game` WHERE `channel_id` = ?;', [channel.id]);
             if(gameDB[0].length){
-				const startDate = mysqlGmtStrToJSDate(gameDB[0][0].start_time);
-				const timeElapsed = Date.now() - startDate.getTime();
+				const timeElapsed = Date.now() - gameDB[0][0].start_time.getTime();
 				if(timeElapsed > 300000){
 					await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
 				} else {
