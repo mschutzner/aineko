@@ -2,8 +2,9 @@ require('dotenv').config();
 const fs = require("fs");
 const { Client, Collection, GatewayIntentBits, InteractionType, ChannelType} = require("discord.js");
 const mysql = require("mysql2/promise");
+const { Campaign } = require('patreon-discord');
 const { stage, lurkerMin, memberMin, regularMin, championMin, decayRate, tickRate, facepalms } = require("./config.json");
-const { sleep, randInt, unixToMysqlDatetime, mysqlGmtStrToJSDate } = require("./utils.js");
+const { sleep, randInt, unixToMysqlDatetime} = require("./utils.js");
 
 // Create a new client instance
 const client = new Client({ 
@@ -28,6 +29,12 @@ const pool = mysql.createPool({
 	connectionLimit: 10,
 	queueLimit: 0
 });
+
+const myCampaign = new Campaign({ 
+    patreonToken: process.env.PATREON_TOKEN,
+    campaignId: process.env.PATREON_CAMPAIGN_ID
+})
+
 
 //Load Commands
 client.commands = new Collection();
@@ -61,10 +68,9 @@ client.on("interactionCreate", async interaction => {
 				ephemeral: true 
 			}); 
 			
-            const gameDB = await conn.query('SELECT `game` FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+            const gameDB = await conn.query('SELECT * FROM `game` WHERE `channel_id` = ?;', [channel.id]);
             if(gameDB[0].length){
-				const startDate = mysqlGmtStrToJSDate(gameDB[0][0].start_time);
-				const timeElapsed = Date.now() - startDate.getTime();
+				const timeElapsed = Date.now() - gameDB[0][0].start_time.getTime();
 				if(timeElapsed > 300000){
 					await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
 				} else {
@@ -581,6 +587,50 @@ const guildCreate = async (guild) => {
 async function activityLoop(){
 	const conn = await pool.getConnection();
 	try{
+		const currTime = Date.now();
+		const patrons = await myCampaign.fetchPatrons(['active_patron', 'former_patron']);
+
+		for(var patron of patrons){
+			if(patron.discord_user_id){
+				const lastCharge = new Date(patron.last_charge_date).getTime();
+				const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [patron.discord_user_id]);
+				if(userDB[0].length > 0 && lastCharge){
+					if(!userDB[0][0].patron_join_time){
+						await conn.query('UPDATE `user` SET `patron_join_time` = ?, `is_patron` = 1 WHERE `user_id` = ?;', [unixToMysqlDatetime(lastCharge), patron.discord_user_id]);
+					}
+
+					if(!userDB[0][0].last_payout_time){
+						const newScritchBucks = userDB[0][0].scritch_bucks + 1000;
+						const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
+						await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+						[patron.discord_user_id, newScritchBucks, userDB[0][0].name]);
+						await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + 1000, `scritch_bucks_highscore` = ? `last_payout_time` = ? WHERE `user_id` = ?;', [highestScritchBucks,unixToMysqlDatetime(currTime), patron.discord_user_id]);
+
+						const user = client.users.cache.get(patron.discord_user_id);
+						if(user) await user.send(`You have just recieved your first 1000 Scritch Bucks in the Aineko bot for joining MadMonkey's Patreon! https://www.patreon.com/monkeymakes`);
+						
+						const owner = client.users.cache.get(process.env.BOT_OWNER_ID);
+						if(owner) await owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for joining the Patreon.`);
+					} else {
+						const lastPayout = new Date(userDB[0][0].last_payout_time).getTime();
+						if(lastCharge > lastPayout){
+							const newScritchBucks = userDB[0][0].scritch_bucks + 1000;
+							const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
+							await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+							[patron.discord_user_id, newScritchBucks, userDB[0][0].name]);
+							await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + 1000, `scritch_bucks_highscore` = ? `last_payout_time` = ? WHERE `user_id` = ?;', [highestScritchBucks,unixToMysqlDatetime(currTime), patron.discord_user_id]);
+							
+							const user = client.users.cache.get(patron.discord_user_id);
+							if(user) await user.send(`You have just recieved 1000 Scritch Bucks in the Aineko bot for renewing your Patreon subscription to MadMonkey! https://www.patreon.com/monkeymakes`);
+							
+							const owner = client.users.cache.get(process.env.BOT_OWNER_ID);
+							if(owner) await owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for renewing their Patreon.`);
+						}
+					}
+				}
+			}
+		}
+
 		const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1;');
 		for await(const guildDB of guildsDB[0]){
 			const guild = await client.guilds.fetch(guildDB.guild_id);
@@ -759,7 +809,7 @@ client.once("ready", async () => {
 
 
 	setTimeout(activityLoop, tickRate);
-	// activityLoop();
+	//activityLoop();
 	
 	questionLoop();
 
