@@ -374,6 +374,8 @@ client.on('guildMemberAdd', async member => {
 	try{
 		await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
 			[member.id, member.displayName]);
+		await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+			[member.id, 100, member.user.username]);
 		//add Aineko cat to user;
 		const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
 			[member.id, 1, member.displayName, 'Aineko']);
@@ -560,6 +562,8 @@ const guildCreate = async (guild) => {
 			if(member.id == client.user.id) continue;
 			await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
 				[member.id, member.displayName]);
+			await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+				[member.id, 100, member.user.username]);
 			//add Aineko cat to user;
 			const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
 				[member.id, 1, member.displayName, 'Aineko']);
@@ -704,13 +708,7 @@ async function timerSetup(){
 
 // Login to Discord with your client's token
 client.once("ready", async () => {
-	client.user.setPresence({
-		status: "available",
-		activities: [{
-			name: "Blackjack",
-			type: "PLAYING"
-		}]
-	});
+	client.user.setPresence({ activities: [{ name: 'blackjack!' }], status: 'available' });
   
 	const conn = await pool.getConnection();
 	try{
@@ -728,6 +726,8 @@ client.once("ready", async () => {
 					if(member.id == client.user.id) continue;
 					await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
 						[member.id, member.displayName]);
+					await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+						[member.id, 100, member.user.username]);
 					//add Aineko cat to user;
 					const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
 						[member.id, 1, member.displayName, 'Aineko']);
