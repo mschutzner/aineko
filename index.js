@@ -180,11 +180,11 @@ client.on('messageCreate', async message => {
 			}
 			if(wrongNum){
 				const failImg = facepalms[randInt(facepalms.length-1)];
-				await channel.send({content: "You must reply with the next number! New game starting now. Messages must be the next number and you must wait two members between messages. Tupperbox messages always counts as the same member.",files: [failImg]});
+				await channel.send({content: "You must reply with the next number! New game starting now. Messages must be the next number and you must wait two members between messages.",files: [failImg]});
 				channel.send('0');
 			} else if (wrongMem){
 				const failImg = facepalms[randInt(facepalms.length-1)];
-				await channel.send({content: "You must wait two members between messages! New game starting now. Messages must be the next number and you must wait two members between messages. Tupperbox messages always counts as the same member.",files: [failImg]});
+				await channel.send({content: "You must wait two members between messages! New game starting now. Messages must be the next number and you must wait two members between messages.",files: [failImg]});
 				channel.send('0');
 			} else if (hundread){
 				const players = [];
@@ -385,12 +385,19 @@ client.on('guildMemberAdd', async member => {
 
 		const guildDB = await conn.query('SELECT * FROM `guild` WHERE `guild_id` = ?;', 
 			[member.guild.id]);
-		if(guildDB[0][0].welcome_message){
+		if(guildDB[0][0].welcome_on && guildDB[0][0].welcome_message && guildDB[0][0].welcome_channel){
 			const msg = `Welcome, ${member.toString()}. ${guildDB[0][0].welcome_message}`;
-			if(guildDB[0][0].welcome_image){
-				await member.guild.systemChannel.send( { content: msg, files: [guildDB[0][0].welcome_image] } );
-			} else {
-				await member.guild.systemChannel.send(msg);
+			const channel = client.channels.cache.get(guildDB[0][0].welcome_channel);
+			if(channel && channel.guildId === member.guild.id){
+				if(guildDB[0][0].welcome_image){
+					try {
+						await channel.send( { content: msg, files: [guildDB[0][0].welcome_image] } );
+					} catch (err){
+						await channel.send(msg);
+					}
+				} else {
+					await channel.send(msg);
+				}
 			}
 		}
 	} finally{
@@ -607,8 +614,8 @@ async function activityLoop(){
 						activityPoints ++; 
 						if(activityPoints < memberMin) activityPoints = memberMin;
 					}
-	
-					if(member.roles.cache.has(guildDB.member_role_id) && activityPoints < lurkerMin ){
+					
+					if(guildDB.remove_member && member.roles.cache.has(guildDB.member_role_id) && activityPoints < lurkerMin ){
 						await member.roles.remove(guildDB.member_role_id);
 	
 						//remove existing reaction
@@ -624,6 +631,7 @@ async function activityLoop(){
 	
 						member.send(`You're member status has lapsed on ${guild.name} because of inactivity. You can reclaim your member status by simply agreeing to the rules again by choosing a name color.`);
 					}
+
 					if(!member.roles.cache.has(guildDB.regular_role_id) && activityPoints > regularMin) await member.roles.add(guildDB.regular_role_id);
 					if(member.roles.cache.has(guildDB.regular_role_id) && activityPoints < regularMin) await member.roles.remove(guildDB.regular_role_id);
 					if(!member.roles.cache.has(guildDB.champion_role_id) && activityPoints > championMin) await member.roles.add(guildDB.champion_role_id);
