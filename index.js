@@ -161,6 +161,7 @@ client.on('messageCreate', async message => {
 			let wrongMem = false;
 			let hundread = false;
 			for( let i = 1; i < messages.length; i++){
+				if (messages[i-1].author.bot) break;
 				const prevNum = Number(messages[i-1].content);
 				const num = Number(messages[i].content);
 				if(prevNum == 100) hundread = true;
@@ -615,7 +616,7 @@ async function activityLoop(){
 						if(activityPoints < memberMin) activityPoints = memberMin;
 					}
 					
-					if(guildDB.remove_member && member.roles.cache.has(guildDB.member_role_id) && activityPoints < lurkerMin ){
+					if(guildDB.remove_members && member.roles.cache.has(guildDB.member_role_id) && activityPoints < lurkerMin ){
 						await member.roles.remove(guildDB.member_role_id);
 	
 						//remove existing reaction
