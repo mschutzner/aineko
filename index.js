@@ -1,7 +1,8 @@
 require('dotenv').config();
 const fs = require("fs");
-const { Client, Collection, GatewayIntentBits, InteractionType, ChannelType} = require("discord.js");
+const { Client, Collection, GatewayIntentBits, InteractionType, ChannelType, Partials} = require("discord.js");
 const mysql = require("mysql2/promise");
+const { Campaign } = require('patreon-discord');
 const { stage, lurkerMin, memberMin, regularMin, championMin, decayRate, tickRate, facepalms } = require("./config.json");
 const { sleep, randInt, unixToMysqlDatetime} = require("./utils.js");
 
@@ -14,7 +15,12 @@ const client = new Client({
 		GatewayIntentBits.GuildMessageReactions,
 		GatewayIntentBits.MessageContent
 	],
-	partials: ['MESSAGE', 'CHANNEL', 'REACTION']
+	partials: [
+		Partials.Channel,
+		Partials.Message,
+		Partials.Reaction
+	]
+
 });
 
 //create mysql2 pool
@@ -27,6 +33,11 @@ const pool = mysql.createPool({
 	waitForConnections: true,
 	connectionLimit: 10,
 	queueLimit: 0
+});
+
+const patreonCampaign = new Campaign({
+	patreonToken: process.env.PATREON_TOKEN,
+	campaignId: process.env.PATREON_CAMPAIGN_ID
 });
 
 //Load Commands
@@ -279,12 +290,12 @@ client.on('messageReactionAdd', async (reaction, user) => {
 						await conn.query('UPDATE `member` SET `color_id` = ? WHERE `guild_id` = ? AND `user_id` = ?;',
 							[color, guild.id, member.id]);
 					}
-
+					
 					//add member role
 					const guildDB = await conn.query('SELECT `member_role_id` FROM `guild` WHERE `guild_id` = ?;',
 						[guild.id]);
 					const memberRoleId = guildDB[0][0].member_role_id;
-					await member.roles.add(memberRoleId)
+					await member.roles.add(memberRoleId);
 				} else { //member doesn't exist yet
 
 					//add color role to member
@@ -302,19 +313,17 @@ client.on('messageReactionAdd', async (reaction, user) => {
 				}
 			break;
 			case 'role':
-				const emoji = (reaction.emoji.id) ? reaction.emoji.id : reaction.emoji.name;
+				const emoji =  reaction.emoji.name;
 				//identifiy role
 				const roleButtonDB = await conn.query('SELECT * FROM `role_button` WHERE `message_id` = ? AND `emoji` = ?;',
 					[reaction.message.id, emoji]);
 				//remove reaction if not a role button
 				if(roleButtonDB[0].length < 1) return reaction.users.remove(member.id);
-				//add new role
-				member.roles.add(roleButtonDB[0][0].role_id);
 				//remove existing roles and reactions if exclusive
 				if(menuDB[0][0].exclusive){
 					//remove users existing reactions
 					reaction.message.reactions.cache.forEach(async existingReaction => {
-						const existingEmoji = (existingReaction.emoji.id) ? existingReaction.emoji.id : existingReaction.emoji.name;
+						const existingEmoji = existingReaction.emoji.name;
 						//don't remove new reaction
 						if(existingEmoji != emoji){
 							//remove reaction
@@ -326,6 +335,8 @@ client.on('messageReactionAdd', async (reaction, user) => {
 						}
 					});
 				}
+				//add new role
+				member.roles.add(roleButtonDB[0][0].role_id);
 			break;
 		}
 	} finally{
@@ -355,7 +366,7 @@ client.on('messageReactionRemove', async (reaction, user) => {
 
 		switch(menuDB[0][0].type){
 			case 'role':
-				const emoji = (reaction.emoji.id) ? reaction.emoji.id : reaction.emoji.name;
+				const emoji = reaction.emoji.name;
 				//identifiy role
 				const roleButtonDB = await conn.query('SELECT `role_id` FROM `role_button` WHERE `message_id` = ? AND `emoji` = ?;',
 					[reaction.message.id, emoji]);
@@ -664,23 +675,21 @@ async function questionLoop(){
 	setTimeout(async () => {
 		const conn = await pool.getConnection();
 		try{
-			const questionDB = await conn.query('SELECT * FROM `question` WHERE `asked` = 0;');
+			
+			const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1;');
+			for await(const guildDB of guildsDB[0]){
+				if(!guildDB.question_channel) continue;
+				const guild = await client.guilds.fetch(guildDB.guild_id);
+				if(!guild) continue;
+				const channel = await guild.channels.fetch(guildDB.question_channel);
+				if(!channel) continue;
 
-			if(questionDB[0].length < 1){
-				console.error("No question of the day!");
-			} else {
-				//random question.
-				const questionId = Math.floor(Math.random() * questionDB[0].length) 
-
-				const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1;');
-				for await(const guildDB of guildsDB[0]){
-					if(!guildDB.question_channel) continue;
-					
-					const guild = await client.guilds.fetch(guildDB.guild_id);
-					const channel = await guild.channels.fetch(guildDB.question_channel);
-					channel.send(`It's now <t:${questionTime/1000}> and it's time for the **question of the day!** \`\`\`${questionDB[0][questionId].question}\`\`\``);
+				const questionDB = await conn.query('SELECT q.* FROM question AS q LEFT JOIN guild_question AS gq ON q._id = gq.question_id AND gq.guild_id = ? WHERE gq._id IS NULL;', [guildDB.guild_id]);
+				if(questionDB[0].length > 0){
+					const questionId = Math.floor(Math.random() * questionDB[0].length)
+					await channel.send(`It is <t:${questionTime/1000}> and it's time for the **question of the day!** \`\`\`${questionDB[0][questionId].question}\`\`\``);
+					await conn.query('INSERT INTO `guild_question` (`guild_id`, `question_id`) VALUES (?, ?);', [guildDB.guild_id, questionId]);
 				}
-				await conn.query('UPDATE `question` SET `asked` = 1 WHERE `_id` = ?;', [questionDB[0][questionId]._id]);
 			}
 		} finally{
 			//release pool connection
@@ -689,6 +698,74 @@ async function questionLoop(){
 			questionLoop();
 		}
 	}, questionTime - curTime);
+}
+
+
+
+async function patreonLoop(){
+	const curDate = new Date();
+
+	const owner = await client.users.fetch(process.env.BOT_OWNER_ID);
+
+	const conn = await pool.getConnection();
+	try{
+		// Get a list of patrons
+		const patrons = await patreonCampaign.fetchPatrons();
+
+		// Iterate through patrons and grant Scritch Bucks
+		for await (const patron of patrons) {
+			if(patron.discord_user_id){
+				const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [patron.discord_user_id]);
+				if(userDB[0].length > 0){
+					if(patron.patron_status === 'active_patron'){
+						if(userDB[0][0].is_patron){
+							const lastPayout = userDB[0][0].last_payout_time;
+							const lastPayoutMonth = lastPayout.getMonth();
+							const lastPayoutYear = lastPayout.getFullYear();
+							if(lastPayoutMonth < curDate.getMonth() || lastPayoutYear < curDate.getFullYear()){
+								const mysqlTime = unixToMysqlDatetime(curDate.getTime());
+								const newScritchBucks = userDB[0][0].scritch_bucks + 1000;
+								const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
+								await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ?, `last_payout_time` = ? WHERE `user_id` = ?;', 
+									[newScritchBucks, highestScritchBucks, mysqlTime, userDB[0][0].user_id]);
+								conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+									[userDB[0][0].user_id, newScritchBucks, userDB[0][0].name]);
+	
+								const user = await client.users.fetch(patron.discord_user_id);
+								if(user){
+									user.send('You just got 1000 Sritch Bucks for renewing your Patreon!');
+								}
+
+								owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for renewing their Patreon!`);
+							}
+						} else {
+							const mysqlTime = unixToMysqlDatetime(curTime.getTime());
+							const newScritchBucks = userDB[0][0].scritch_bucks + 1000;
+							const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
+							await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ?, `is_patron` = ?, `patron_join_time` = ?, `last_payout_time` = ? WHERE `user_id` = ?;', 
+								[newScritchBucks, highestScritchBucks, 1, mysqlTime, mysqlTime, userDB[0][0].user_id]);
+							conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+								[userDB[0][0].user_id, newScritchBucks, userDB[0][0].name]);
+
+							const user = await client.users.fetch(patron.discord_user_id);
+							if(user){
+								user.send('You just got 1000 Sritch Bucks for joining the Patreon!');
+							}
+
+							owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for joining the Patreon!`);
+						}
+					} else {
+						await conn.query('UPDATE `user` SET `is_patron` = 0 WHERE `user_id` = ?;', [userDB[0][0].user_id]);
+					}
+				}
+			}
+		}
+	} finally{
+		//release pool connection
+		conn.release();
+
+		setTimeout(async () => patreonLoop, 3600000);
+	}
 }
 
 async function timerSetup(){
@@ -763,6 +840,8 @@ client.once("ready", async () => {
 	// 	console.log(reaction)
 	// }
 
+	
+
 
 
 
@@ -770,6 +849,8 @@ client.once("ready", async () => {
 	// activityLoop();
 	
 	questionLoop();
+
+	patreonLoop();
 
 	timerSetup();
 
