@@ -448,6 +448,9 @@ client.on('guildDelete', async guild => {
 });
 
 const guildCreate = async (guild) => {
+	const owner = await client.users.fetch(process.env.BOT_OWNER_ID);
+	owner.send(`Aineko added to ${guild.name}!`);
+
 	//get the bots highest role
 	const hightestRole = guild.me.roles.highest;
 
@@ -688,7 +691,7 @@ async function questionLoop(){
 				if(questionDB[0].length > 0){
 					const questionId = Math.floor(Math.random() * questionDB[0].length)
 					await channel.send(`It is <t:${questionTime/1000}> and it's time for the **question of the day!** \`\`\`${questionDB[0][questionId].question}\`\`\``);
-					await conn.query('INSERT INTO `guild_question` (`guild_id`, `question_id`) VALUES (?, ?);', [guildDB.guild_id, questionId]);
+					await conn.query('INSERT INTO `guild_question` (`guild_id`, `question_id`) VALUES (?, ?);', [guildDB.guild_id, questionDB[0][questionId]._id]);
 				}
 			}
 		} finally{
@@ -704,8 +707,6 @@ async function questionLoop(){
 
 async function patreonLoop(){
 	const curDate = new Date();
-
-	const owner = await client.users.fetch(process.env.BOT_OWNER_ID);
 
 	const conn = await pool.getConnection();
 	try{
@@ -731,12 +732,16 @@ async function patreonLoop(){
 								conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 									[userDB[0][0].user_id, newScritchBucks, userDB[0][0].name]);
 	
-								const user = await client.users.fetch(patron.discord_user_id);
-								if(user){
-									user.send('You just got 1000 Sritch Bucks for renewing your Patreon!');
-								}
+								try{
+									const user = await client.users.fetch(patron.discord_user_id);
+									if(user){
+										user.send('You just got 1000 Sritch Bucks for renewing your Patreon!');
+									}
 
-								owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for renewing their Patreon!`);
+									const owner = await client.users.fetch(process.env.BOT_OWNER_ID);
+	
+									owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for renewing their Patreon!`);
+								} catch(err){}
 							}
 						} else {
 							const mysqlTime = unixToMysqlDatetime(curTime.getTime());
@@ -747,12 +752,16 @@ async function patreonLoop(){
 							conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 								[userDB[0][0].user_id, newScritchBucks, userDB[0][0].name]);
 
-							const user = await client.users.fetch(patron.discord_user_id);
-							if(user){
-								user.send('You just got 1000 Sritch Bucks for joining the Patreon!');
-							}
-
-							owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for joining the Patreon!`);
+							try{
+								const user = await client.users.fetch(patron.discord_user_id);
+								if(user){
+									user.send('You just got 1000 Sritch Bucks for joining the Patreon!');
+								}
+	
+								const owner = await client.users.fetch(process.env.BOT_OWNER_ID);
+	
+								owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for joining the Patreon!`);
+							} catch(err){}
 						}
 					} else {
 						await conn.query('UPDATE `user` SET `is_patron` = 0 WHERE `user_id` = ?;', [userDB[0][0].user_id]);
@@ -794,7 +803,7 @@ async function timerSetup(){
 
 // Login to Discord with your client's token
 client.once("ready", async () => {
-	client.user.setPresence({ activities: [{ name: 'blackjack!' }], status: 'available' });
+	client.user.setPresence({ activities: [{ name: 'aineko.gg' }], status: 'available' });
   
 	const conn = await pool.getConnection();
 	try{

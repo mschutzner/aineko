@@ -9,7 +9,7 @@ module.exports = {
 				.setName('text')
 				.setDescription('The text for Aineko to say.')
 				.setRequired(true))
-		.setDefaultMemberPermissions(PermissionFlagsBits.ADMINISTRATOR),
+		.setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 	async execute(interaction) {
 		const text = interaction.options.getString('text');
 		interaction.deferReply();
