@@ -20,7 +20,6 @@ const client = new Client({
 		Partials.Message,
 		Partials.Reaction
 	]
-
 });
 
 //create mysql2 pool
@@ -295,7 +294,11 @@ client.on('messageReactionAdd', async (reaction, user) => {
 					const guildDB = await conn.query('SELECT `member_role_id` FROM `guild` WHERE `guild_id` = ?;',
 						[guild.id]);
 					const memberRoleId = guildDB[0][0].member_role_id;
-					await member.roles.add(memberRoleId);
+					//see if member role exists
+					const memberRole = await guild.roles.fetch(memberRoleId);
+					if(memberRole){
+						await member.roles.add(memberRoleId);
+					}
 				} else { //member doesn't exist yet
 
 					//add color role to member
@@ -305,11 +308,15 @@ client.on('messageReactionAdd', async (reaction, user) => {
 					const guildDB = await conn.query('SELECT `member_role_id` FROM `guild` WHERE `guild_id` = ?;',
 						[guild.id]);
 					const memberRoleId = guildDB[0][0].member_role_id;
-					await member.roles.add(memberRoleId);
+					//see if member role exists
+					const memberRole = await guild.roles.fetch(memberRoleId);
+					if(memberRole){
+						await member.roles.add(memberRoleId);
+					}
 
 					//add member to DB
-					await conn.query('INSERT IGNORE INTO `member` (guild_id, user_id, name, color_id) VALUES (?, ?, ?, ?);',
-						[guild.id, member.id, member.displayName, color]);
+					await conn.query('UPDATE `member` SET `color_id` = ? WHERE `guild_id` = ? AND `user_id` = ?;',
+						[color, guild.id, member.id]);
 				}
 			break;
 			case 'role':
@@ -452,7 +459,8 @@ const guildCreate = async (guild) => {
 	owner.send(`Aineko added to ${guild.name}!`);
 
 	//get the bots highest role
-	const hightestRole = guild.me.roles.highest;
+	const botMember = await guild.members.cache.get(client.user.id);
+	const hightestRole = botMember.roles.highest;
 
 	//grab connection from pool for multiple queries.
 	const conn = await pool.getConnection();
@@ -463,46 +471,25 @@ const guildCreate = async (guild) => {
 			//see if champion role still exists
 			const championRole = await guild.roles.fetch(guildDB[0][0].champion_role_id);
 			if(!championRole){
-				//make a new champion role
-				const newRole = await guild.roles.create({
-					name: "Champion",
-					permissions: "0",
-					hoist: true,
-					position: hightestRole-1
-				});
 				await conn.query(
-					'UPDATE `guild` SET `champion_role_id` = ? WHERE `guild_id` = ?;',
-					[newRole.id, guild.id]
+					'UPDATE `guild` SET `champion_role_id` = NULL WHERE `guild_id` = ?;',
+					[guild.id]
 				);
 			}
 			//see if regular role still exists
 			const regularRole = await guild.roles.fetch(guildDB[0][0].regular_role_id);
 			if(!regularRole){
-				//make a new regular role
-				const newRole = await guild.roles.create({
-					name: "Regular",
-					permissions: "0",
-					hoist: true,
-					position: hightestRole-2
-				});
 				await conn.query(
-					'UPDATE `guild` SET `regular_role_id` = ? WHERE `guild_id` = ?;',
-					[newRole.id, guild.id]
+					'UPDATE `guild` SET `regular_role_id` = NULL WHERE `guild_id` = ?;',
+					[guild.id]
 				);
 			}
 			//see if member role still exists
 			const memberRole = await guild.roles.fetch(guildDB[0][0].member_role_id);
 			if(!memberRole){
-				//make a new member role
-				const newRole = await guild.roles.create({
-					name: "Member",
-					permissions: "1024",
-					hoist: true,
-					position: hightestRole-3
-				});
 				await conn.query(
-					'UPDATE `guild` SET `member_role_id` = ? WHERE `guild_id` = ?;',
-					[newRole.id, guild.id]
+					'UPDATE `guild` SET `member_role_id` = NULL WHERE `guild_id` = ?;',
+					[guild.id]
 				);
 			}
 			await conn.query(
@@ -510,29 +497,10 @@ const guildCreate = async (guild) => {
 				[guild.id]
 			);
 		} else { //guild is not in DB
-			const championRole = await guild.roles.create({
-				name: "Champion",
-				permissions: "0",
-				hoist: true,
-				position: hightestRole-1
-			});
-			const regularRole = await guild.roles.create({
-				name: "Regular",
-				permissions: "0",
-				hoist: true,
-				position: hightestRole-2
-			});
-			//make a member role
-			const memberRole = await guild.roles.create({
-				name: "Member",
-				permissions: "1024",
-				hoist: true,
-				position: hightestRole-3
-			});
 			//add the guild to the database
 			await conn.query(
-				'INSERT IGNORE INTO `guild` (guild_id, name, member_role_id, regular_role_id, champion_role_id) VALUES (?, ?, ?, ?, ?);',
-				[guild.id, guild.name, memberRole.id, regularRole.id, championRole.id]
+				'INSERT IGNORE INTO `guild` (guild_id, name) VALUES (?, ?);',
+				[guild.id, guild.name]
 			);
 		}
 
@@ -610,6 +578,36 @@ async function activityLoop(){
 		for await(const guildDB of guildsDB[0]){
 			const guild = await client.guilds.fetch(guildDB.guild_id);
 
+			//see if member role is defined in DB
+			let memberRole;
+			if(guildDB.member_role_id){
+				//see if member role exists
+				memberRole = await guild.roles.fetch(guildDB.member_role_id);
+				if(!memberRole){
+					await conn.query('UPDATE `guild` SET `member_role_id` = NULL WHERE `guild_id` = ?;', [guild.id]);
+				}
+			}
+
+			//see if regular role is defined in DB
+			let regularRole;
+			if(guildDB.regular_role_id){
+				//see if regular role exists
+				regularRole = await guild.roles.fetch(guildDB.regular_role_id);
+				if(!regularRole){
+					await conn.query('UPDATE `guild` SET `regular_role_id` = NULL WHERE `guild_id` = ?;', [guild.id]);
+				}
+			}
+
+			//see if champion role is defined in DB
+			let championRole;
+			if(guildDB.champion_role_id){
+				//see if champion role exists
+				championRole = await guild.roles.fetch(guildDB.champion_role_id);
+				if(!championRole){
+					await conn.query('UPDATE `guild` SET `champion_role_id` = NULL WHERE `guild_id` = ?;', [guild.id]);
+				}
+			}
+
 			const colorMenuDB = await conn.query('SELECT * FROM `menu` where `type` = "color" AND `guild_id` = ?;', [guild.id]);
 			let colorMsg;
 			if(colorMenuDB[0].length > 0){
@@ -631,7 +629,9 @@ async function activityLoop(){
 					}
 					
 					if(guildDB.remove_members && member.roles.cache.has(guildDB.member_role_id) && activityPoints < lurkerMin ){
-						await member.roles.remove(guildDB.member_role_id);
+						if(memberRole){
+							await member.roles.remove(guildDB.member_role_id);
+						}
 	
 						//remove existing reaction
 						const curColor = memberDB.color_id;
@@ -647,10 +647,16 @@ async function activityLoop(){
 						member.send(`You're member status has lapsed on ${guild.name} because of inactivity. You can reclaim your member status by simply agreeing to the rules again by choosing a name color.`);
 					}
 
-					if(!member.roles.cache.has(guildDB.regular_role_id) && activityPoints > regularMin) await member.roles.add(guildDB.regular_role_id);
-					if(member.roles.cache.has(guildDB.regular_role_id) && activityPoints < regularMin) await member.roles.remove(guildDB.regular_role_id);
-					if(!member.roles.cache.has(guildDB.champion_role_id) && activityPoints > championMin) await member.roles.add(guildDB.champion_role_id);
-					if(member.roles.cache.has(guildDB.champion_role_id) && activityPoints < championMin) await member.roles.remove(guildDB.champion_role_id);
+					if(regularRole){
+						if(!member.roles.cache.has(guildDB.regular_role_id) && activityPoints > regularMin) await member.roles.add(guildDB.regular_role_id);
+						if(member.roles.cache.has(guildDB.regular_role_id) && activityPoints < regularMin) await member.roles.remove(guildDB.regular_role_id);
+					}
+
+					const championRole = await guild.roles.fetch(guildDB.champion_role_id);
+					if(championRole){
+						if(!member.roles.cache.has(guildDB.champion_role_id) && activityPoints > championMin) await member.roles.add(guildDB.champion_role_id);
+						if(member.roles.cache.has(guildDB.champion_role_id) && activityPoints < championMin) await member.roles.remove(guildDB.champion_role_id);
+					}
 	
 					await conn.query('UPDATE `member` SET `activity_points` = ?, `active` = 0, `prev_active` = ? WHERE `guild_id` = ? AND `user_id` = ?;',
 						[activityPoints, memberDB.active, guild.id, member.id]);
@@ -732,16 +738,23 @@ async function patreonLoop(){
 								conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 									[userDB[0][0].user_id, newScritchBucks, userDB[0][0].name]);
 	
-								try{
-									const user = await client.users.fetch(patron.discord_user_id);
-									if(user){
+								// Fetch the user by their Discord ID
+								const user = await client.users.fetch(patron.discord_user_id);
+								
+								//check if user is defined
+								if(user){
+									// Check if the user is in any of the servers the bot is in
+									const sharedServers = client.guilds.cache.filter(guild => guild.members.cache.has(user.id));
+									
+									// If the user is in at least one server the bot is in, then send the message
+									if (sharedServers.size > 0) {
 										user.send('You just got 1000 Sritch Bucks for renewing your Patreon!');
 									}
-
-									const owner = await client.users.fetch(process.env.BOT_OWNER_ID);
-	
-									owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for renewing their Patreon!`);
-								} catch(err){}
+								}
+										
+								// Fetch the owner and send a notification message
+								const owner = await client.users.fetch(process.env.BOT_OWNER_ID);
+								owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for renewing their Patreon!`);
 							}
 						} else {
 							const mysqlTime = unixToMysqlDatetime(curTime.getTime());
@@ -752,16 +765,23 @@ async function patreonLoop(){
 							conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 								[userDB[0][0].user_id, newScritchBucks, userDB[0][0].name]);
 
-							try{
-								const user = await client.users.fetch(patron.discord_user_id);
-								if(user){
-									user.send('You just got 1000 Sritch Bucks for joining the Patreon!');
+							// Fetch the user by their Discord ID
+							const user = await client.users.fetch(patron.discord_user_id);
+							
+							//check if user is defined
+							if(user){
+								// Check if the user is in any of the servers the bot is in
+								const sharedServers = client.guilds.cache.filter(guild => guild.members.cache.has(user.id));
+								
+								// If the user is in at least one server the bot is in, then send the message
+								if (sharedServers.size > 0) {
+									user.send('You just got 1000 Sritch Bucks for renewing your Patreon!');
 								}
-	
-								const owner = await client.users.fetch(process.env.BOT_OWNER_ID);
-	
-								owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for joining the Patreon!`);
-							} catch(err){}
+							}
+									
+							// Fetch the owner and send a notification message
+							const owner = await client.users.fetch(process.env.BOT_OWNER_ID);
+							owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for renewing their Patreon!`);
 						}
 					} else {
 						await conn.query('UPDATE `user` SET `is_patron` = 0 WHERE `user_id` = ?;', [userDB[0][0].user_id]);
@@ -772,8 +792,6 @@ async function patreonLoop(){
 	} finally{
 		//release pool connection
 		conn.release();
-
-		setTimeout(async () => patreonLoop, 3600000);
 	}
 }
 
@@ -819,15 +837,25 @@ client.once("ready", async () => {
 				members = [...members.values()];
 				for await (const member of members){
 					if(member.id == client.user.id) continue;
-					await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
-						[member.id, member.displayName]);
-					await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-						[member.id, 100, member.user.username]);
-					//add Aineko cat to user;
-					const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
-						[member.id, 1, member.displayName, 'Aineko']);
-					if(userCatDB[0].affectedRows){
-						member.send({content: 'You just gained ownership of Aineko by joining your first server with Aineko in it. Aineko is your first cat but you can collect many more by interacting with the bot. Owning Aineko unlocks the /scritch command which you can use to earn "scritch bucks", an in bot currency represented by ฅ.', files: ['images/cats/Aineko.jpg']});
+					
+					// Try to insert the user into the `user` table
+					const userInsertResult = await conn.query('INSERT IGNORE INTO `user` (user_id, name) VALUES (?, ?);',
+					[member.id, member.displayName]);
+
+					// Check if the user was actually inserted
+					if (userInsertResult[0].affectedRows > 0) {
+						// The user was inserted, so proceed with the other queries
+						await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+							[member.id, 100, member.user.username]);
+
+						// Add Aineko cat to the user
+						const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+							[member.id, 1, member.displayName, 'Aineko']);
+
+						// Check if the cat was actually inserted
+						if(userCatDB[0].affectedRows > 0) {
+							member.send({content: 'You just gained ownership of Aineko by joining your first server with Aineko in it. Aineko is your first cat but you can collect many more by interacting with the bot. Owning Aineko unlocks the /scritch command which you can use to earn "scritch bucks", an in bot currency represented by ฅ.', files: ['images/cats/Aineko.jpg']});
+						}
 					}
 				}
 			}
@@ -837,22 +865,9 @@ client.once("ready", async () => {
 		conn.release();
 	}
 	
-	// const guild = await client.guilds.fetch('825883828798881822');
-	// const channel = await guild.channels.fetch('865713507136045117');
-	// const msg = await channel.messages.fetch('1000499776204312726');
-	// const colorsDB = await conn.query('SELECT * FROM `color`;');
-	// for await (const color of colorsDB[0]){
-	// 	msg.react(color.emoji_id)
-	// // }
-	// const reactions = await msg.reactions.cache;
-	// for(const reaction of reactions){
-	// 	console.log(reaction)
-	// }
-
-	
-
-
-
+	// const guild = await client.guilds.fetch('');
+	// const channel = await guild.channels.fetch('');
+	// const msg = await channel.messages.fetch('');
 
 	setTimeout(activityLoop, tickRate);
 	// activityLoop();
@@ -860,6 +875,7 @@ client.once("ready", async () => {
 	questionLoop();
 
 	patreonLoop();
+	setInterval(async () => { await patreonLoop(); }, 3600000);
 
 	timerSetup();
 
