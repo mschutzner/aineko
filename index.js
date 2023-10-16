@@ -270,14 +270,16 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
 					//remove existing reaction
 					const curColor = memberDB[0][0].color_id;
-					const curColorDB = await conn.query('SELECT `emoji_id` FROM `color` WHERE `_id` = ?;', [curColor]);
-					const curColorEmojiId = curColorDB[0][0].emoji_id;
-					await reaction.message.reactions.cache.find(r => r.emoji.id == curColorEmojiId).users.remove(member.id);
-
-					//remove existing role
-					const curColorRoleDB = await conn.query('SELECT `role_id` FROM `color_role` WHERE `guild_id`= ? AND `color_id` = ?;',
-						[guild.id, curColor]);
-					await member.roles.remove(curColorRoleDB[0][0].role_id);
+					if(curColor){
+						const curColorDB = await conn.query('SELECT `emoji_id` FROM `color` WHERE `_id` = ?;', [curColor]);
+						const curColorEmojiId = curColorDB[0][0].emoji_id;
+						await reaction.message.reactions.cache.find(r => r.emoji.id == curColorEmojiId).users.remove(member.id);
+	
+						//remove existing role
+						const curColorRoleDB = await conn.query('SELECT `role_id` FROM `color_role` WHERE `guild_id`= ? AND `color_id` = ?;',
+							[guild.id, curColor]);
+						await member.roles.remove(curColorRoleDB[0][0].role_id);
+					}
 
 					//add color role to member
 					await member.roles.add(colorRoleId);
