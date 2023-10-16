@@ -315,8 +315,8 @@ client.on('messageReactionAdd', async (reaction, user) => {
 					}
 
 					//add member to DB
-					await conn.query('UPDATE `member` SET `color_id` = ? WHERE `guild_id` = ? AND `user_id` = ?;',
-						[color, guild.id, member.id]);
+					await conn.query('INSERT IGNORE INTO `member` (`guild_id`, `user_id`, `name`, `color_id`) VALUES (?, ?, ?, ?);',
+						[guild.id, member.id, member.displayName, color]);
 				}
 			break;
 			case 'role':
@@ -395,6 +395,9 @@ client.on('guildMemberAdd', async member => {
 			[member.id, member.displayName]);
 		await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 			[member.id, 100, member.user.username]);
+		//add member to DB
+		await conn.query('INSERT IGNORE INTO `member` (`guild_id`, `user_id`, `name`) VALUES (?, ?, ?);',
+			[member.guild.id, member.id, member.displayName]);
 		//add Aineko cat to user;
 		const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
 			[member.id, 1, member.displayName, 'Aineko']);
@@ -554,6 +557,9 @@ const guildCreate = async (guild) => {
 				[member.id, member.displayName]);
 			await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 				[member.id, 100, member.user.username]);
+			//add member to DB
+			await conn.query('INSERT IGNORE INTO `member` (`guild_id`, `user_id`, `name`) VALUES (?, ?, ?);',
+				[guild.id, member.id, member.displayName]);
 			//add Aineko cat to user;
 			const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
 				[member.id, 1, member.displayName, 'Aineko']);
@@ -844,6 +850,9 @@ client.once("ready", async () => {
 
 					// Check if the user was actually inserted
 					if (userInsertResult[0].affectedRows > 0) {
+						//add member to DB
+						await conn.query('INSERT IGNORE INTO `member` (`guild_id`, `user_id`, `name`) VALUES (?, ?, ?);',
+							[guild.id, member.id, member.displayName]);
 						// The user was inserted, so proceed with the other queries
 						await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 							[member.id, 100, member.user.username]);
@@ -865,12 +874,23 @@ client.once("ready", async () => {
 		conn.release();
 	}
 	
-	// const guild = await client.guilds.fetch('');
+  
+  
+	// const conn2 = await pool.getConnection();
+	// const guild = await client.guilds.fetch('1161061255029719100');
+	// const members = await guild.members.fetch();  
+	// for (var member of members){
+	// 	console.log(member.id, member.displayName);
+	// 	//add member to DB
+	// 	conn2.query('INSERT IGNORE INTO `member` (`guild_id`, `user_id`, `name`) VALUES (?, ?, ?);', [guild.id, member.id, member.displayName]);
+	// }
+	// conn2.release();
+
 	// const channel = await guild.channels.fetch('');
 	// const msg = await channel.messages.fetch('');
 
-	setTimeout(activityLoop, tickRate);
-	// activityLoop();
+	// setTimeout(activityLoop(), tickRate);
+	activityLoop();
 	
 	questionLoop();
 
