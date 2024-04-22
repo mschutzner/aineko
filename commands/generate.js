@@ -46,6 +46,7 @@ module.exports = {
               prompt: text,
               n: 1,
               size: "1024x1024",
+              model: 'dall-e-3'
             });
 
             msg.delete();
