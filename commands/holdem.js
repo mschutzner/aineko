@@ -1,0 +1,1257 @@
+const { SlashCommandBuilder } = require('@discordjs/builders');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
+const { sleep, shuffle } = require("../utils.js");
+
+const emojiIds = {
+    red_ace: '1322741793284165734',
+    black_ace: '1322741769640607814',
+    red_2: '1322742250450456668',
+    black_2: '1322741760266469508',
+    red_3: '1322741779598016582',
+    black_3: '1322741761399062640',
+    red_4: '1322742251595763858',
+    black_4: '1322741762678325288',
+    red_5: '1322741783859429406',
+    black_5: '1322741763860861009',
+    red_6: '1322742252749193298',
+    black_6: '1322741765265952861',
+    red_7: '1322741787118276720',
+    black_7: '1322741766264324179',
+    red_8: '1322742253969473648',
+    black_8: '1322741758022516736',
+    red_9: '1322741790788554863',
+    black_9: '1322742246566527160',
+    red_10: '1322743479574597642',
+    black_10: '1322743478446460939',
+    red_jack: '1322742288064974848',
+    black_jack: '1322742247699255297',
+    red_queen: '1322742258411503649',
+    black_queen: '1322742248881786991',
+    red_king: '1322741797515952139',
+    black_king: '1322741772870488074',
+    hearts_suit: '1322741717266464831',
+    diamonds_suit: '1322741715832143913',
+    clubs_suit: '1322739460776923167',
+    spades_suit: '1322741714795888701',
+    black_card: '1322745250372128808',
+    blank_suit: '1322745251491745843',
+};
+
+function getEmoji(suit, value) {
+    const values = ['ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'jack', 'queen', 'king'];
+    return `${suit === 0 || suit === 1 ? 'red_' : 'black_'}${values[value - 1]}`;
+}
+
+function shuffleDeck() {
+    const deck = [];
+    // Create one deck of 52 cards
+    // j represents suit (0-3: hearts, diamonds, clubs, spades)
+    // k represents value (1-13: Ace through King)
+    for(let j = 0; j < 4; j++){
+        for(let k = 1; k <= 13; k++){
+            deck.push([j,k]);
+        }
+    }
+    return shuffle(deck);
+}
+
+function communityCardsString(communityCards, stage) {
+    switch(stage){
+        case 0: // Pre-flop
+            return `<:black_card:1322745250372128808> <:black_card:1322745250372128808> <:black_card:1322745250372128808> <:black_card:1322745250372128808> <:black_card:1322745250372128808>
+<:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843>`;
+        
+        case 1: // Flop (first 3 cards)
+            return `${communityCards.slice(0, 3).map(card => {
+                const emoji = getEmoji(card[0], card[1]);
+                return `<:${emoji}:${emojiIds[emoji]}>`;
+            }).join(' ')} <:black_card:1322745250372128808> <:black_card:1322745250372128808>
+${communityCards.slice(0, 3).map(card => {
+                const suit = ['hearts_suit', 'diamonds_suit', 'clubs_suit', 'spades_suit'][card[0]];
+                return `<:${suit}:${emojiIds[suit]}>`;
+            }).join(' ')} <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843>`;
+        
+        case 2: // Turn (4 cards)
+            return `${communityCards.slice(0, 4).map(card => {
+                const emoji = getEmoji(card[0], card[1]);
+                return `<:${emoji}:${emojiIds[emoji]}>`;
+            }).join(' ')} <:black_card:1322745250372128808>
+${communityCards.slice(0, 4).map(card => {
+                const suit = ['hearts_suit', 'diamonds_suit', 'clubs_suit', 'spades_suit'][card[0]];
+                return `<:${suit}:${emojiIds[suit]}>`;
+            }).join(' ')} <:blank_suit:1322745251491745843>`;
+        
+        case 3: // River (all 5 cards)
+            return `${communityCards.map(card => {
+                const emoji = getEmoji(card[0], card[1]);
+                return `<:${emoji}:${emojiIds[emoji]}>`;
+            }).join(' ')}
+${communityCards.map(card => {
+                const suit = ['hearts_suit', 'diamonds_suit', 'clubs_suit', 'spades_suit'][card[0]];
+                return `<:${suit}:${emojiIds[suit]}>`;
+            }).join(' ')}`;
+    }
+}
+
+async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn) {
+    // Assign positions based on number of players
+    let dealerPlayer, smallBlindPlayer, bigBlindPlayer;
+    
+    if (players.length > 2) {
+        dealerPlayer = players[0];
+        smallBlindPlayer = players[1];
+        bigBlindPlayer = players[2];
+    } else {
+        dealerPlayer = players[0];
+        smallBlindPlayer = players[0]; // dealer is small blind
+        bigBlindPlayer = players[1];
+    }
+
+    const pots = [
+        {
+            amount: smallBlindAmount + bigBlindAmount,
+            ante: bigBlindAmount,
+        }
+    ];
+
+    // Send game start message to the channel
+    await channel.send(`## Game started!
+${dealerPlayer.member.toString()} shuffled the deck and dealt the cards.
+${smallBlindPlayer.member.toString()} payed the smll blind of ฅ${smallBlindAmount}.
+${bigBlindPlayer.member.toString()} payed the big blind of ฅ${bigBlindAmount}.
+**Community Cards**:
+<:blank_card:1322745250372128808> <:blank_card:1322745250372128808> <:blank_card:1322745250372128808> <:blank_card:1322745250372128808> <:blank_card:1322745250372128808>
+<:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843>
+Main Pot: ${pots[0].amount}`);
+
+
+    const deck = shuffleDeck();
+    const communityCards = deck.splice(0, 5);
+
+    for (const player of players) {
+        //deal 2 cards to each player
+        player.hand = deck.splice(0, 2);
+
+        // Sort the hand by card value, treating Aces as high
+        player.hand.sort((a, b) => (b[1] === 1 ? 14 : b[1]) - (a[1] === 1 ? 14 : a[1]));
+        
+        // Construct the hand message
+        const valuesLine = player.hand.map(card => {
+            const emoji = getEmoji(card[0], card[1]);
+            return `<:${emoji}:${emojiIds[emoji]}>`;
+        }).join(' ');
+
+        const suitsLine = player.hand.map(card => {
+            const [suit] = card;
+            return ['<:hearts_suit:1322741717266464831>', '<:diamonds_suit:1322741715832143913>', '<:clubs_suit:1322739460776923167>', '<:spades_suit:1322741714795888701>'][suit];
+        }).join(' ');
+
+        // Send the hand message as direct messages
+        await player.member.send(`**Your hand:**
+${valuesLine}\n${suitsLine}`);
+    }
+
+    smallBlindPlayer.chips -= smallBlindAmount;
+    bigBlindPlayer.chips -= bigBlindAmount;
+    
+    smallBlindPlayer.bet = smallBlindAmount;
+    bigBlindPlayer.bet = bigBlindAmount;
+
+    if (players.length > 2) {
+        const firstPlayer = players.shift();
+        players.push(firstPlayer);
+    }
+    
+    await channel.send(`## Time for initial bets`);
+    const [preflopPlayers, preflopPots, preflopFolded] = await playHoldemStage(players, pots, 0, communityCards, channel, conn);
+    if(preflopFolded || preflopPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, preflopPlayers, preflopPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+   
+    if(preflopPlayers.length === 2) preflopPlayers.reverse();
+   
+    await channel.send(`## Proceeding to the flop.
+**Community Cards**:
+${communityCardsString(communityCards, 1)}
+Main Pot: ${preflopPots[0].amount}${preflopPots.length > 1 ? preflopPots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+    const [flopPlayers, flopPots, flopFolded] = await playHoldemStage(preflopPlayers, preflopPots, 1, communityCards, channel, conn);
+    if(flopFolded || flopPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, flopPlayers, flopPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+   
+    await channel.send(`## Now it's time for the turn.
+**Community Cards**:
+${communityCardsString(communityCards, 2)}
+Main Pot: ${flopPots[0].amount}${flopPots.length > 1 ? flopPots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+    const [turnPlayers, turnPots, turnFolded] = await playHoldemStage(flopPlayers, flopPots, 2, communityCards, channel, conn);
+    if(turnFolded || turnPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, turnPlayers, turnPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+   
+    await channel.send(`## Sailing down the river!
+**Community Cards**:
+${communityCardsString(communityCards, 3)}
+Main Pot: ${turnPots[0].amount}${turnPots.length > 1 ? turnPots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+    const [riverPlayers, riverPots, riverFolded] = await playHoldemStage(turnPlayers, turnPots, 3, communityCards, channel, conn);
+    
+    await channel.send("## It's the final showdown!");
+    return determineWinner(communityCards, riverPlayers, riverPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+}
+
+async function determineWinner(communityCards, players, pots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn) {    
+    // Function to evaluate poker hands
+    const evaluateHand = (player, communityCards) => {
+        const hand = [...player.hand, ...communityCards];
+        
+        // Sort the hand by card value, treating Aces as high
+        hand.sort((a, b) => (b[1] === 1 ? 14 : b[1]) - (a[1] === 1 ? 14 : a[1]));
+        
+        // Check for pairs, three of a kind, etc.
+        const valueCounts = {};
+        hand.forEach(card => {
+            const value = card[1];
+            valueCounts[value] = (valueCounts[value] || 0) + 1;
+        });
+        const counts = Object.values(valueCounts);
+    
+        const suitCounts = [0,0,0,0]
+        for(const card of hand){
+            suitCounts[card[0]]++
+        }
+        const mostSuitIndex = suitCounts.indexOf(Math.max(...suitCounts));
+        const sameSuitCards = hand.filter(card => card[0] === mostSuitIndex);
+        const isFlush = sameSuitCards.length >= 5;
+        
+        let isRoyalFlush
+        let straightLength = 0;
+        for(let i = sameSuitCards.length - 1; i > 0; i--){
+            if(sameSuitCards[i][1] < 10) continue;
+            if(sameSuitCards[i-1][1] === sameSuitCards[i][1]) continue
+            if(sameSuitCards[i-1][1] - sameSuitCards[i][1] === 1  || (sameSuitCards[i-1][1] === 1 && sameSuitCards[i][1] === 13)){
+                straightLength++;
+            } else {
+                straightLength = 0;
+            }
+            if(straightLength === 4){
+                isRoyalFlush = true;
+                break;
+            }
+        }
+    
+        let isHighStraightFlush;
+        straightLength = 0;
+        for(let i = sameSuitCards.length - 1; i > 0; i--){
+            if(sameSuitCards[i-1][1] === sameSuitCards[i][1]) continue
+            if(sameSuitCards[i-1][1] - sameSuitCards[i][1] === 1  || (sameSuitCards[i-1][1] === 1 && sameSuitCards[i][1] === 13)){
+                straightLength++;
+            } else {
+                straightLength = 0;
+            }
+            if(straightLength === 4){
+                isHighStraightFlush = true;
+                break;
+            }
+        }
+    
+        const isLowStraightFlush = !isHighStraightFlush && sameSuitCards.some(card => card[1] === 1) && sameSuitCards.some(card => card[1] === 2) && sameSuitCards.some(card => card[1] === 3) && sameSuitCards.some(card => card[1] === 4) && sameSuitCards.some(card => card[1] === 5);
+    
+        let isHighStraight;
+        straightLength = 0;
+        for(let i = hand.length - 1; i > 0; i--){
+            if(hand[i-1][1] === hand[i][1]) continue
+            if(hand[i-1][1] - hand[i][1] === 1  || (hand[i-1][1] === 1 && hand[i][1] === 13)){
+                straightLength++;
+            } else {
+                straightLength = 0;
+            }
+            if(straightLength === 4){
+                isHighStraight = true;
+                break;
+            }
+        }
+    
+        const isLowStraight = !isHighStraight && hand.some(card => card[1] === 1) && hand.some(card => card[1] === 2) && hand.some(card => card[1] === 3) && hand.some(card => card[1] === 4) && hand.some(card => card[1] === 5);
+    
+        let rank = 0;
+        let handName = "High Card";
+        let bestHand = [];
+    
+        if (isRoyalFlush) {
+            rank = 11;
+            handName = "Royal Flush";
+            bestHand = sameSuitCards.slice(0, 5);
+        } else if (isHighStraightFlush) {
+            rank = 10;
+            handName = "Straight Flush";    
+            for(let i = 0; i < sameSuitCards.length - 1; i++){
+                if (sameSuitCards[i][1] === sameSuitCards[i+1][1]) continue;
+                if(sameSuitCards[i][1] - sameSuitCards[i+1][1] === 1 || (sameSuitCards[i][1] === 1 && sameSuitCards[i+1][1] === 13)){
+                    bestHand.push(sameSuitCards[i]);
+                } else {
+                    bestHand = [];
+                    continue;
+                }
+                if(bestHand.length === 4){
+                    bestHand.push(sameSuitCards[i+1]);
+                    break;
+                }
+            }
+        } else if (isLowStraightFlush) {
+            rank = 9;
+            handName = "Steel Wheel";  // Common name for A-2-3-4-5 straight flush
+            // First get all cards of the same suit
+            const sameSuitCards = hand.filter(card => card[0] === hand[0][0]);
+            // Get cards 2-5 first in descending order, then add ace at the end
+            const twoToFive = sameSuitCards.filter(card => card[1] >= 2 && card[1] <= 5)
+                .sort((a, b) => b[1] - a[1]);  // Changed to descending order
+            const ace = sameSuitCards.find(card => card[1] === 1);
+            bestHand = [...twoToFive, ace];
+        } else if (counts.includes(4)) {
+            rank = 8;
+            handName = "Four of a Kind";
+            const value = Number(Object.keys(valueCounts).find(key => valueCounts[key] === 4));
+            bestHand = [
+                ...hand.filter(card => card[1] === value),
+                ...hand.filter(card => card[1] !== value).slice(0, 1)
+            ];
+        } else if (counts.includes(3) && counts.includes(2)) {
+            rank = 7;
+            handName = "Full House";
+            const threeValue = Number(Object.keys(valueCounts).find(key => valueCounts[key] === 3));
+            const twoValue = Number(Object.keys(valueCounts).find(key => valueCounts[key] === 2));
+            bestHand = [
+                ...hand.filter(card => card[1] === threeValue),
+                ...hand.filter(card => card[1] === twoValue).slice(0, 2)
+            ];
+        } else if (isFlush) {
+            rank = 6;
+            handName = "Flush";
+            bestHand = sameSuitCards.slice(0, 5);
+        } else if (isHighStraight) {
+            rank = 5;
+            handName = "Straight";
+            for(let i = 0; i < hand.length - 1; i++){
+                if (hand[i][1] === hand[i+1][1]) continue;
+                if(hand[i][1] - hand[i+1][1] === 1 || (hand[i][1] === 1 && hand[i+1][1] === 13)){
+                    bestHand.push(hand[i]);
+                } else {
+                    bestHand = [];
+                    continue;
+                }
+                if(bestHand.length === 4){
+                    bestHand.push(hand[i+1]);
+                    break;
+                }
+            }
+        } else if (isLowStraight) {
+            rank = 4;
+            handName = "Wheel";  // Common name for A-2-3-4-5 straight
+            // Get cards 2-5 first in descending order, then add ace at the end
+            const twoToFive = hand.filter(card => card[1] >= 2 && card[1] <= 5)
+                .sort((a, b) => b[1] - a[1]);  // Changed to descending order
+            const aces = hand.filter(card => card[1] === 1);
+            const straightCards = [...twoToFive, ...aces];
+            const seen = new Set();
+            straightCards.forEach(card => {
+                if (!seen.has(card[1])) {
+                    bestHand.push(card);
+                    seen.add(card[1]);
+                }
+            });
+        } else if (counts.includes(3)) {
+            rank = 3;
+            handName = "Three of a Kind";
+            const value = Number(Object.keys(valueCounts).find(key => valueCounts[key] === 3));
+            bestHand = [
+                ...hand.filter(card => card[1] === value),
+                ...hand.filter(card => card[1] !== value).slice(0, 2)
+            ];
+        } else if (counts.filter(count => count === 2).length >= 2) {
+            rank = 2;
+            handName = "Two Pair";
+            const pairValues = Object.keys(valueCounts)
+                .filter(key => valueCounts[key] === 2)
+                .map(Number)
+                .sort((a, b) => (b === 1 ? 14 : b) - (a === 1 ? 14 : a));
+            bestHand = [
+                ...hand.filter(card => card[1] === pairValues[0]),
+                ...hand.filter(card => card[1] === pairValues[1]),
+                ...hand.filter(card => !pairValues.includes(card[1])).slice(0, 1)
+            ];
+        } else if (counts.includes(2)) {
+            rank = 1;
+            handName = "One Pair";
+            const value = Number(Object.keys(valueCounts).find(key => valueCounts[key] === 2));
+            bestHand = [
+                ...hand.filter(card => card[1] === value),
+                ...hand.filter(card => card[1] !== value).slice(0, 3)
+            ];
+        } else {
+            bestHand = hand.slice(0, 5);
+        }
+    
+        return {
+            ...player,
+            rank,
+            handName,
+            bestHand
+        };
+    };
+    
+    const breakTies = (results) => {
+        // Group results by rank
+        const rankGroups = {};
+        results.forEach(result => {
+            if (!rankGroups[result.rank]) {
+                rankGroups[result.rank] = [];
+            }
+            rankGroups[result.rank].push(result);
+        });
+    
+        // Sort each rank group by comparing cards
+        Object.values(rankGroups).forEach(group => {
+            if (group.length > 1) {
+                group.sort((a, b) => {
+                    const aFullHand = a.bestHand.concat(a.hand);
+                    const bFullHand = b.bestHand.concat(b.hand);
+    
+                    // Convert card values, treating Ace as 14
+                    const aValues = aFullHand.map(card => card[1] === 1 ? 14 : card[1]);
+                    const bValues = bFullHand.map(card => card[1] === 1 ? 14 : card[1]);
+    
+                    // Compare each card position
+                    for (let i = 0; i < aValues.length; i++) {
+                        if (aValues[i] !== bValues[i]) {
+                            return bValues[i] - aValues[i]; // Higher value wins
+                        }
+                    }
+                    return 0; // True tie
+                });
+            }
+        });
+        
+        // Create final results array, grouping tied players together
+        const finalResults = [];
+        const ranks = Object.keys(rankGroups).map(Number).sort((a, b) => b - a);
+        
+        for (const rank of ranks) {
+            const group = rankGroups[rank];
+            const tiedGroups = [];
+            let currentTieGroup = [group[0]];
+            
+            for (let i = 1; i < group.length; i++) {
+                const a = group[i - 1];
+                const b = group[i];
+                
+                const aFullHand = a.bestHand.concat(a.hand);
+                const bFullHand = b.bestHand.concat(b.hand);
+                
+                const aValues = aFullHand.map(card => card[1] === 1 ? 14 : card[1]);
+                const bValues = bFullHand.map(card => card[1] === 1 ? 14 : card[1]);
+                
+                let isTie = true;
+                for (let j = 0; j < aValues.length; j++) {
+                    if (aValues[j] !== bValues[j]) {
+                        isTie = false;
+                        break;
+                    }
+                }
+                
+                if (isTie) {
+                    currentTieGroup.push(b);
+                } else {
+                    tiedGroups.push([...currentTieGroup]);
+                    currentTieGroup = [b];
+                }
+            }
+            tiedGroups.push([...currentTieGroup]);
+            finalResults.push(...tiedGroups);
+        }
+
+        // Return both winners (first tie group) and complete results
+        return finalResults;
+    };
+
+    const playersInGame = players.filter(player => !player.folded);
+    const results = playersInGame.map(player => evaluateHand(player, communityCards));
+    const finalResults = breakTies(results);
+
+    //reverse to list hands in ascending order
+    finalResults.reverse();
+
+    // Construct the message to show hands
+    let handsMessage = "## Players' Hands:\n";
+    finalResults.forEach(result => {
+        result.forEach(player => {
+            let valuesLine = '';
+            let suitsLine = '';
+            
+            // Display best hand
+            player.bestHand.forEach(card => {
+                const emoji = getEmoji(card[0], card[1]);
+                valuesLine += `<:${emoji}:${emojiIds[emoji]}>`;
+                suitsLine += ['<:hearts_suit:1322741717266464831>', '<:diamonds_suit:1322741715832143913>', 
+                            '<:clubs_suit:1322739460776923167>', '<:spades_suit:1322741714795888701>'][card[0]];
+            });
+
+            // Add separator
+            valuesLine += `<:blank:826302290838290442>`;
+            suitsLine += `<:blank:826302290838290442>`;
+
+            // Display hole cards
+            player.hand.forEach(card => {
+                const emoji = getEmoji(card[0], card[1]);
+                valuesLine += `<:${emoji}:${emojiIds[emoji]}>`;
+                suitsLine += ['<:hearts_suit:1322741717266464831>', '<:diamonds_suit:1322741715832143913>', 
+                            '<:clubs_suit:1322739460776923167>', '<:spades_suit:1322741714795888701>'][card[0]];
+            });
+
+            handsMessage += `${player.member.toString()} - ${player.handName}
+${valuesLine}
+${suitsLine}\n`;
+        });
+    });
+    await channel.send(handsMessage);
+
+    //reverse back to descending order
+    finalResults.reverse();
+
+    // Sort pots by ante amount (highest to lowest)
+    pots.sort((a, b) => b.ante - a.ante);
+
+    //distribute pots
+    let splits = 0;
+    while(pots.length > 0){
+        for (const pot of pots) {
+            // Filter winners who are eligible for this pot (bet >= ante)
+            const potWinners = finalResults[splits].filter(player => player.bet >= pot.ante);
+            if (potWinners.length === 0) continue;
+
+            // Split pot among winners
+            const splitAmount = Math.floor(pot.amount / potWinners.length);
+            const remainder = pot.amount % potWinners.length;
+
+            // Distribute split amount to each winner
+            potWinners.forEach(potWinner => {
+                const player = finalResults[splits].find(player => player.member.id === potWinner.member.id);
+                player.chips += splitAmount;
+                if(player.won){
+                    player.won += splitAmount;
+                } else {
+                    player.won = splitAmount;
+                }
+            });
+
+            // Give remainder to first winner (if any)
+            if (remainder > 0) {
+                finalResults[splits][0].chips += remainder;
+                if(finalResults[splits][0].won){
+                    finalResults[splits][0].won += remainder;
+                } else {
+                    finalResults[splits][0].won = remainder;
+                }
+            }
+
+            //remove pot from pots
+            pots = pots.filter(p => p !== pot);
+        }
+        splits++;
+    }
+
+    let winningMessage = '';
+    for(const finalResult of finalResults){
+        for(const player of finalResult){
+            if(!player.won) continue
+            winningMessage += `# ${player.member.toString()} won ฅ${player.won} with ${player.handName}!\n`;
+            players.find(winner => winner.member.id === player.member.id).chips = player.chips;
+        }
+    }
+    await channel.send(winningMessage);
+
+    completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+}
+
+async function completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn){
+
+    let nexRoundStartTime = Math.ceil(Date.now()/1000)+62;
+
+    const previousPlayers = players;
+
+    players.forEach(player => {
+        player.folded = false;
+        player.allIn = false;
+        player.bet = 0;
+        player.hand = [];
+    });
+
+    // New message with button components for cashing out, starting, canceling, and joining
+    const joinButton = new ButtonBuilder()
+        .setCustomId('join')
+        .setLabel('Join Game')
+        .setStyle(ButtonStyle.Success);
+
+    const cashOutButton = new ButtonBuilder()
+        .setCustomId('cashout')
+        .setLabel('Cash Out')
+        .setStyle(ButtonStyle.Primary);
+
+    const startButton = new ButtonBuilder()
+        .setCustomId('start')
+        .setLabel('Start Game')
+        .setStyle(ButtonStyle.Primary);
+
+    const cancelButton = new ButtonBuilder()
+        .setCustomId('cancel')
+        .setLabel('End Game')
+        .setStyle(ButtonStyle.Danger);
+
+    const actionRow = new ActionRowBuilder().addComponents(joinButton, cashOutButton, startButton, cancelButton);
+
+    players = players.filter(player => player.chips > 0);// Check if host is no longer in players
+    if (!players.some(player => player.member.id === host.id)) {
+        host = players[0] ? players[0].member : players[1] ? players[1].member : null;
+    }
+
+    const message = await channel.send({
+        content: `## Round over!
+Players of the last round now have:
+${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.chips === 0 ? ' (busted)' : ''}`).join('\n')}
+Next game starting <t:${nexRoundStartTime}:R>. 
+Players can cash out now, new players can join, and the host can start the next round or cancel the game.
+## Players in next game:
+${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (host)' : ''}`).join('\n')}`,
+        components: [actionRow]
+    });
+
+    // Create a collector for the button interactions
+    const collector = message.createMessageComponentCollector({
+        componentType: ComponentType.Button,
+        time: 60000 // 60 seconds for the collector
+    });
+
+    collector.on('collect', async i => {
+        try {
+            if (i.customId === 'join') {
+                // Check if player is already in game
+                if (players.some(p => p.member.id === i.user.id)) {
+                    await i.reply({ content: "You're already in the game.", ephemeral: true });
+                    return;
+                }
+
+                // Check if player has enough scritch bucks
+                const joinUserDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [i.user.id]);
+                if(joinUserDB[0].length === 0) {
+                    await i.reply({ content: "You don't exist in the database.", ephemeral: true });
+                    return;
+                }
+                if(buyIn > joinUserDB[0][0].scritch_bucks) {
+                    await i.reply({ content: "You don't have enough scritch bucks.", ephemeral: true });
+                    return;
+                }
+
+                // Take buy-in from player
+                await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
+                    [buyIn, i.user.id]);
+                
+                // Record transaction in user_scritch
+                await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
+                    [i.user.id, joinUserDB[0][0].scritch_bucks - buyIn, i.user.username]);
+
+                // Add player to game
+                players.push({
+                    member: i.member,
+                    chips: buyIn,
+                    bet: 0,
+                    hand: []
+                });
+
+                await i.deferUpdate();
+                await channel.send(`${i.user.toString()} has joined the game with a buy-in of ฅ${buyIn}!`);
+            } else if (i.customId === 'cashout') {
+                const userDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [i.user.id]);
+                if (userDB[0].length === 0) {
+                    await i.reply({ content: "You don't exist in the database.", ephemeral: true });
+                    return;
+                }
+
+                // Get the player's chips from the players array
+                const player = players.find(p => p.member.id === i.user.id);
+                if (!player) {
+                    await i.reply({ content: "You are not in the game.", ephemeral: true });
+                    return;
+                }
+
+                const currentAmount = userDB[0][0].scritch_bucks;
+                const newAmount = currentAmount + player.chips; // Add player's chips to current scritch_bucks
+                const highestScritchBucks = Math.max(newAmount, userDB[0][0].scritch_bucks_highscore);
+
+                // Update scritch_bucks and record transaction
+                await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+                    [newAmount, highestScritchBucks, i.user.id]);
+                await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
+                    [i.user.id, player.chips, i.user.username]); // Record the chips being cashed out
+
+                players = players.filter(p => p.member.id !== i.user.id); // Remove player from players array
+                previousPlayers.find(p => p.member.id === i.user.id).cashedOut = true;
+
+                if (i.user.id === host.id) {
+                    host = players[0] ? players[0].member : players[1] ? players[1].member : null;
+                    await i.reply(`${i.user.toString()} has cashed out ${player.chips} scritch bucks. ${host.toString()} is now the new host!`);
+                } else {
+                    await i.reply(`${i.user.toString()} has cashed out ${player.chips} scritch bucks.`);
+                }
+
+                // Add strikethrough to the player's chips line in the message
+                const messageLines = message.content.split('\n');
+                const playerLine = messageLines.findIndex(line => line.includes(`${i.user.toString()}`) && !line.includes('(cashed out)'));
+                if (playerLine !== -1) {
+                    messageLines[playerLine] = `${messageLines[playerLine]} (cashed out)`;
+                    await message.edit(messageLines.join('\n'));
+                }
+
+                await message.edit({
+                    content: `## Round over!
+Players of the last round now have:
+${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.cashedOut ? ' (cashed out)' : player.chips === 0 ? ' (busted)' : ''}`).join('\n')}
+Next game starting <t:${nexRoundStartTime}:R>. 
+Players can cash out now, new players can join, and the host can start the next round or cancel the game.
+## Players in next game:
+${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (host)' : ''}`).join('\n')}`,
+                    components: [actionRow]
+                });
+
+            } else if (i.customId === 'start' || i.customId === 'cancel') {
+                // Only game host can start/cancel
+                if (i.user.id !== host.id) {
+                    await i.reply({ content: `Only the game host can ${i.customId} the game.`, ephemeral: true });
+                    return;
+                }
+
+                if (i.customId === 'start') {
+                    message.edit({
+                        content: message.content,
+                        components: [],
+                    });
+
+                    await i.deferUpdate();
+
+                    collector.stop('started');
+                } else {
+                    await i.deferUpdate();
+                    
+                    collector.stop('cancelled');
+                }
+            }
+        } catch (error) {
+            console.error('Button interaction error:', error);
+            await i.reply({ content: "An error occurred while processing your action.", ephemeral: true }).catch(console.error);
+        }
+    });
+
+    collector.on('end', async (collected, reason) => {
+        if (reason !== 'cancelled' && players.length > 1) { 
+            await message.edit({
+                content: `## Round over!
+Players of the last round now have:
+${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.cashedOut ? ' (cashed out)' : player.chips === 0 ? ' (busted)' : ''}`).join('\n')}`,
+                components: []
+            });
+
+            players.push(players.shift());
+            playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+            return;
+        } else {
+            // Cash out all remaining players
+            for (const player of players) {
+                // Get current scritch_bucks before cash out
+                const cashoutUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [player.member.id]);
+                const newAmount = cashoutUserDB[0][0].scritch_bucks + player.chips;
+                const highestScritchBucks = Math.max(newAmount, cashoutUserDB[0][0].scritch_bucks_highscore);
+
+                // Update scritch_bucks and record transaction
+                await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+                    [newAmount, highestScritchBucks, player.member.id]);
+                await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
+                    [player.member.id, player.chips, player.member.user.username]);
+            }
+
+            if (reason === 'cancelled') {                     
+                await message.edit({
+                    content: `## Round over!
+Players of the last round now have:
+${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.chips === 0 ? ' (busted)' : ' (cashed out)'}`).join('\n')}`,
+                    components: []
+                });                               
+                await channel.send('Game cancelled by host. All players have been cashed out.');
+            } else {                             
+                await message.edit({
+                    content: `## Round over!
+Players of the last round now have:
+${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.chips === 0 ? ' (busted)' : ' (cashed out)'}`).join('\n')}`,
+                    components: []
+                });                               
+                await channel.send('Game cancelled: Not enough players. All players have been cashed out.');
+            }
+
+            await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id])
+                .catch(console.error);
+        }                            
+    });
+}
+
+function createPokerButtons(enabled = true) {
+    const fold = new ButtonBuilder()
+        .setCustomId('fold')
+        .setLabel('Fold')
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(!enabled);
+
+    const call = new ButtonBuilder()
+        .setCustomId('call')
+        .setLabel('Call')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(!enabled);
+
+    const raise = new ButtonBuilder()
+        .setCustomId('raise')
+        .setLabel('Raise')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(!enabled);
+
+    const allIn = new ButtonBuilder()
+        .setCustomId('allin')
+        .setLabel('All In')
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(!enabled);
+
+    const row1 = new ActionRowBuilder().addComponents(fold, call);
+    const row2 = new ActionRowBuilder().addComponents(raise, allIn);
+
+    return [row1, row2];
+}
+
+function createLobbyButtons() {
+    const join = new ButtonBuilder()
+        .setCustomId('join')
+        .setLabel('Join Game')
+        .setStyle(ButtonStyle.Success);
+
+    const start = new ButtonBuilder()
+        .setCustomId('start')
+        .setLabel('Start Game')
+        .setStyle(ButtonStyle.Primary);
+
+    const cancel = new ButtonBuilder()
+        .setCustomId('cancel')
+        .setLabel('Cancel Game')
+        .setStyle(ButtonStyle.Danger);
+
+    return new ActionRowBuilder().addComponents(join, start, cancel);
+}
+
+async function playHoldemStage(players, pots, stage, communityCards, channel, conn) {
+    // Update the game timestamp in the database
+    await conn.query('UPDATE `game` SET `start_time` = NOW() WHERE `channel_id` = ?;', [channel.id]);
+
+    const actionRow = createPokerButtons(); // Create buttons for player actions
+
+    let currentPlayerIndex = 0;
+
+    let playersStillIn = players.length;
+
+    const processPlayerAction = async () => {
+        const currentPlayer = players[currentPlayerIndex];
+
+        if(playersStillIn === 1) {
+            return [players, pots, true];
+        }
+
+        if (currentPlayer.folded || currentPlayer.allIn || currentPlayer.chips === 0) {
+            if (currentPlayerIndex < players.length - 1) {
+                currentPlayerIndex++;
+                return processPlayerAction();
+            } else {
+                // Check if we need another round
+                const needsAnotherRound = players.some(player => 
+                    !player.folded && !player.allIn && player.bet < pots[0].ante
+                );
+
+                if (needsAnotherRound) {
+                    currentPlayerIndex = 0;
+                    return processPlayerAction();
+                }
+                return [players, pots];
+            }
+        }
+
+        const message = await channel.send({
+            content: `${currentPlayer.member.toString()}, it's your turn! The call amount is ฅ${pots[0].ante} and your current bet is ฅ${currentPlayer.bet}. Act quick or you will fold <t:${Math.ceil(Date.now()/1000)+60}:R>.`,
+            components: actionRow
+        });
+
+        let raiseCollector;
+
+        return new Promise((resolve) => {
+            const collector = message.createMessageComponentCollector({
+                componentType: ComponentType.Button,
+                time: 60000
+            });
+
+            collector.on('collect', async i => {
+                try {
+                    if (i.user.id !== currentPlayer.member.id) {
+                        await i.reply({ content: "It's not your turn!", ephemeral: true });
+                        return;
+                    }
+
+                    if (i.customId === 'raise') {
+                        await i.deferUpdate();
+                        const raisePrompt = await channel.send(`${currentPlayer.member.toString()}, how much would you like to raise? Act quick or you will fold <t:${Math.ceil(Date.now()/1000)+60}:R>.`);
+                        
+                        const filter = m => m.author.id === currentPlayer.member.id && !isNaN(m.content) && parseInt(m.content) > 0;
+                        raiseCollector = channel.createMessageCollector({
+                            filter,
+                            time: 60000, // 30 seconds for the collector
+                        });
+
+                        // Reset button collector timeout to allow time for message response
+                        collector.resetTimer();
+
+                        raiseCollector.on('collect', async (message) => {
+                            const raiseAmount = parseInt(message.content);
+                            if (raiseAmount > currentPlayer.chips) {
+                                await i.followUp({
+                                    content: "You don't have enough chips for that raise amount.",
+                                    ephemeral: true
+                                });
+                                return;
+                            }
+                            pots[0].ante += raiseAmount;
+                            const difference = pots[0].ante - currentPlayer.bet;
+                            currentPlayer.chips -= difference;
+                            currentPlayer.bet += difference;
+                            pots[0].amount += difference;
+
+                            await channel.send(`${currentPlayer.member.toString()} raised by ${raiseAmount}.
+**Community Cards**:
+${communityCardsString(communityCards, stage)}
+Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+
+                            currentPlayerIndex++;
+                            collector.stop();
+                        });
+                    } else {
+                        if (i.customId === 'fold') {
+                            await i.deferUpdate();
+                            await channel.send(`${currentPlayer.member.toString()} has folded.
+**Community Cards**:
+${communityCardsString(communityCards, stage)}
+Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+                            currentPlayer.bet = 0;
+                            currentPlayer.folded = true;
+                            playersStillIn--;
+                        } else if (i.customId === 'call') {
+                            const difference = pots[0].ante - currentPlayer.bet;
+
+                            if(currentPlayer.chips < difference) {
+                                await i.reply({
+                                    content: `You must go all-in.`,
+                                    ephemeral: true
+                                });
+                                return;
+                            } else {
+                                currentPlayer.chips -= difference;
+                                currentPlayer.bet += difference;
+                                pots[0].amount += difference;
+
+                                await i.deferUpdate();
+                                await channel.send(`${currentPlayer.member.toString()} has called.
+**Community Cards**:
+${communityCardsString(communityCards, stage)}
+Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+                            }
+                        } else if (i.customId === 'allin') {
+                            await i.deferUpdate();
+                            currentPlayer.bet += currentPlayer.chips;
+                            if(currentPlayer.bet >= pots[0].ante) {
+                                const difference = currentPlayer.bet - pots[0].ante;
+                                pots[0].ante += difference;
+                                pots[0].amount += currentPlayer.chips;
+
+                                await channel.send(`${currentPlayer.member.toString()} has gone all-in for ฅ${currentPlayer.chips}
+**Community Cards**:
+${communityCardsString(communityCards, stage)}
+Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+                            } else {
+                                pots[0].amount -= currentPlayer.bet - currentPlayer.chips;
+                                let sidePotMatch = false;
+                                for(let i = 1; i < pots.length; i++){
+                                    if(pots[i] && currentPlayer.bet === pots[i].ante) {
+                                        pots[i].amount += currentPlayer.chips;
+                                        await channel.send(`${currentPlayer.member.toString()} has gone all-in, joining the ฅ${pots[i].amount} side pot!**Community Cards**:
+${communityCardsString(communityCards, stage)}
+Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+                                        sidePotMatch = true;
+                                        break;
+                                    }
+                                }
+                                if(!sidePotMatch){
+                                    pots.push({
+                                        amount: currentPlayer.bet,
+                                        ante: currentPlayer.bet
+                                    });
+                                    await channel.send(`${currentPlayer.member.toString()} has gone all-in, creating a side pot of ฅ${currentPlayer.bet}!**Community Cards**:
+${communityCardsString(communityCards, stage)}
+Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+                                }
+                            }
+                            currentPlayer.chips = 0;
+                            currentPlayer.allIn = true;
+                        }
+
+                        // Move to the next player
+                        currentPlayerIndex++;
+                        collector.stop();
+                        message.delete();
+                    }
+                } catch (error) {
+                    console.error('Button interaction error:', error);
+                    await i.reply({ content: "An error occurred while processing your action.", ephemeral: true }).catch(console.error);
+                }
+            });
+
+            collector.on('end', async (collected, reason) => {
+                if(raiseCollector) raiseCollector.stop();
+
+                if (reason === 'time' ) {
+                    await channel.send(`${currentPlayer.member.toString()} took too long to respond and has folded.`);
+                    currentPlayer.bet = 0;
+                    currentPlayer.folded = true;
+                    playersStillIn--;
+                    currentPlayerIndex++;
+                }
+
+                if (currentPlayerIndex < players.length) {
+                    processPlayerAction().then(resolve);
+                } else {
+                    const needsAnotherRound = players.some(player => 
+                        !player.folded && !player.allIn && player.bet < pots[0].ante
+                    );
+
+                    if (needsAnotherRound) {
+                        currentPlayerIndex = 0;
+                        processPlayerAction().then(resolve);
+                    } else {
+                        resolve([players, pots]);
+                    }
+                }
+            });
+        });
+    };
+    return processPlayerAction();
+}
+
+module.exports = {
+    data: new SlashCommandBuilder()
+        .setName('holdem')
+        .setDescription('Start a game of Texas Hold\'em')
+        .addIntegerOption(option =>
+            option.setName('buy_in')
+                .setDescription('Amount of scritch bucks to buy in with')
+                .setRequired(true)),
+    game: true,
+    async execute(interaction, pool) {        
+        const buyIn = interaction.options.getInteger('buy_in');
+        const channel = interaction.channel;
+        const startTime = Date.now();
+        
+        // Get database connection
+        const conn = await pool.getConnection();
+        
+        try {
+            // Check if there's already a game in this channel
+            const gameDB = await conn.query('SELECT * FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+            if(gameDB[0].length > 0) {
+                return interaction.reply({
+                    content: "There's already a game in progress in this channel.",
+                    ephemeral: true
+                });
+            }
+
+            // Get user's current scritch bucks
+            const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [interaction.member.id]);
+            if(userDB[0].length === 0) {
+                return interaction.reply({
+                    content: "You don't exist in the database.",
+                    ephemeral: true
+                });
+            }
+            if(buyIn > userDB[0][0].scritch_bucks) {
+                return interaction.reply({
+                    content: "You don't have enough scritch bucks.",
+                    ephemeral: true
+                });
+            }
+
+            // For the actual game message
+            const message = await interaction.reply({ 
+                content: `${interaction.member.toString()} has started a game of Texas Hold'em with a buy-in of ฅ${buyIn}!
+The game will start <t:${Math.ceil(startTime/1000)+62}:R> or when the host starts it.
+## Players
+${interaction.member.toString()}`,
+                components: [createLobbyButtons()],
+                fetchReply: true
+            });
+
+            // Add game to database
+            await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, "holdem");', [channel.id]);
+
+            // Take buy-in from initiator
+            await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
+                [buyIn, interaction.member.id]);
+            
+            // Record transaction in user_scritch
+            await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
+                [interaction.member.id, userDB[0][0].scritch_bucks - buyIn, interaction.member.user.username]);
+
+            // Create list of players with their chips
+            const players = [{
+                member: interaction.member,
+                chips: buyIn,
+                bet: 0,
+                hand: []
+            }];
+
+            // Create button collector
+            const collector = message.createMessageComponentCollector({
+                componentType: ComponentType.Button,
+                time: 60000 
+            });
+
+            collector.on('collect', async i => {
+                try {
+                    if (i.customId === 'join') {
+                        // Check if player is already in game
+                        if (players.some(p => p.member.id === i.user.id)) {
+                            await i.reply({ content: "You're already in the game.", ephemeral: true });
+                            return;
+                        }
+
+                        // Check if player has enough scritch bucks
+                        const joinUserDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [i.user.id]);
+                        if(joinUserDB[0].length === 0) {
+                            await i.reply({ content: "You don't exist in the database.", ephemeral: true });
+                            return;
+                        }
+                        if(buyIn > joinUserDB[0][0].scritch_bucks) {
+                            await i.reply({ content: "You don't have enough scritch bucks.", ephemeral: true });
+                            return;
+                        }
+
+                        // Take buy-in from player
+                        await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
+                            [buyIn, i.user.id]);
+                        
+                        // Record transaction in user_scritch
+                        await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
+                            [i.user.id, joinUserDB[0][0].scritch_bucks - buyIn, i.user.username]);
+
+                        // Add player to game
+                        players.push({
+                            member: i.member,
+                            chips: buyIn,
+                            bet: 0,
+                            hand: []
+                        });
+
+                        await i.deferUpdate();
+                        await channel.send(`${i.user.toString()} has joined the game with a buy-in of ฅ${buyIn}!`);
+
+                        await message.edit({
+                            content: message.content + `\n${i.user.toString()}`,
+                            components: [createLobbyButtons()]
+                        });
+                    } else if (i.customId === 'start' || i.customId === 'cancel') {
+                        // Only game host can start/cancel
+                        if (i.user.id !== interaction.member.id) {
+                            await i.reply({ content: `Only the game host can ${i.customId} the game.`, ephemeral: true });
+                            return;
+                        }
+
+                        if (i.customId === 'start') {
+                            if (players.length < 2) {
+                                await i.reply({ content: "Need at least 2 players to start!", ephemeral: true });
+                                return;
+                            }
+
+                            await i.deferUpdate();
+
+                            collector.stop('started');
+                        } else {
+                            await i.deferUpdate();
+                            
+                            collector.stop('cancelled');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Button interaction error:', error);
+                    await i.reply({ content: "An error occurred while processing your action.", ephemeral: true }).catch(console.error);
+                }
+            });
+
+            collector.on('end', async (collected, reason) => {
+                if (reason !== 'cancelled' && players.length > 1) {                    
+                    // Set initial blinds
+                    const smallBlindAmount = Math.max(Math.floor(buyIn * 0.01), 1); // 1% of buy-in, minimum 1
+                    const bigBlindAmount = smallBlindAmount * 2;
+
+                    interaction.editReply({
+                        content: `${interaction.member.toString()} has started a game of Texas Hold'em with a buy-in of ฅ${buyIn}!
+## Players
+${players.map(player => player.member.toString()).join('\n')}`,
+                        components: [],
+                    });
+
+                    return playHoldemRound(players, interaction.member, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+                } else if (reason === 'cancelled') {
+                    await interaction.editReply({
+                        content: `Game cancelled by host. All buy-ins have been refunded.
+## Players
+${players.map(player => player.member.toString() + ' (cashed out)').join('\n')}`,
+                        components: []
+                    });
+                } else {
+                    await interaction.editReply({
+                        content: `Game cancelled: Not enough players joined within the time limit. All buy-ins have been refunded.
+## Players
+${players.map(player => player.member.toString() + '(cashed out)').join('\n')}`,
+                        components: []
+                    });
+                }
+
+                // Refund all players if not enough players
+                for (const player of players) {
+                    // Get current scritch_bucks before refund
+                    const refundUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [player.member.id]);
+                    const newAmount = refundUserDB[0][0].scritch_bucks + buyIn;
+                    const highestScritchBucks = (newAmount > refundUserDB[0][0].scritch_bucks_highscore) ? newAmount : refundUserDB[0][0].scritch_bucks_highscore;
+                    
+                    // Update scritch_bucks and record transaction
+                    await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+                        [newAmount, highestScritchBucks, player.member.id]);
+                    await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
+                        [player.member.id, newAmount, player.member.user.username]);
+                }
+
+                // Remove game from database
+                await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+            });
+
+        } catch(err) {
+            console.error('Holdem command error:', err);
+            await interaction.editReply({ 
+                content: "An error occurred while starting the game. Please try again."
+            }).catch(console.error);
+            
+            await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id])
+                .catch(console.error);
+            throw err;
+        } finally {
+            conn.release();
+        }
+    },
+};
