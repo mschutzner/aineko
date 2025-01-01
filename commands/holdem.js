@@ -1,45 +1,20 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 const { sleep, shuffle } = require("../utils.js");
+require('dotenv').config();
 
-const emojiIds = {
-    red_ace: '1322741793284165734',
-    black_ace: '1322741769640607814',
-    red_2: '1322742250450456668',
-    black_2: '1322741760266469508',
-    red_3: '1322741779598016582',
-    black_3: '1322741761399062640',
-    red_4: '1322742251595763858',
-    black_4: '1322741762678325288',
-    red_5: '1322741783859429406',
-    black_5: '1322741763860861009',
-    red_6: '1322742252749193298',
-    black_6: '1322741765265952861',
-    red_7: '1322741787118276720',
-    black_7: '1322741766264324179',
-    red_8: '1322742253969473648',
-    black_8: '1322741758022516736',
-    red_9: '1322741790788554863',
-    black_9: '1322742246566527160',
-    red_10: '1322743479574597642',
-    black_10: '1322743478446460939',
-    red_jack: '1322742288064974848',
-    black_jack: '1322742247699255297',
-    red_queen: '1322742258411503649',
-    black_queen: '1322742248881786991',
-    red_king: '1322741797515952139',
-    black_king: '1322741772870488074',
-    hearts_suit: '1322741717266464831',
-    diamonds_suit: '1322741715832143913',
-    clubs_suit: '1322739460776923167',
-    spades_suit: '1322741714795888701',
-    black_card: '1322745250372128808',
-    blank_suit: '1322745251491745843',
-};
+function getEmoji(emojis, name){
+    return emojis.find(e => e.name === name).toString();
+}
 
-function getEmoji(suit, value) {
-    const values = ['ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'jack', 'queen', 'king'];
-    return `${suit === 0 || suit === 1 ? 'red_' : 'black_'}${values[value - 1]}`;
+function getValueEmoji(suit, value, emojis) {
+    const prefix = suit === 0 || suit === 1 ? 'red_' : 'black_';
+    const valueString = ['ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'jack', 'queen', 'king'][value - 1];
+    return getEmoji(emojis, prefix + valueString);
+}
+
+function getSuitEmoji(suit, emojis){
+    return getEmoji(emojis, ['hearts_suit', 'diamonds_suit', 'clubs_suit', 'spades_suit'][suit]);
 }
 
 function shuffleDeck() {
@@ -55,45 +30,32 @@ function shuffleDeck() {
     return shuffle(deck);
 }
 
-function communityCardsString(communityCards, stage) {
+function communityCardsString(communityCards, stage, emojis) { 
+    const blackCard = getEmoji(emojis, 'blank_card');
+    const blankSuit = getEmoji(emojis, 'blank_suit');
     switch(stage){
         case 0: // Pre-flop
-            return `<:black_card:1322745250372128808> <:black_card:1322745250372128808> <:black_card:1322745250372128808> <:black_card:1322745250372128808> <:black_card:1322745250372128808>
-<:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843>`;
+            return `${blackCard} ${blackCard} ${blackCard} ${blackCard} ${blackCard}
+${blankSuit} ${blankSuit} ${blankSuit} ${blankSuit} ${blankSuit}`;
         
         case 1: // Flop (first 3 cards)
-            return `${communityCards.slice(0, 3).map(card => {
-                const emoji = getEmoji(card[0], card[1]);
-                return `<:${emoji}:${emojiIds[emoji]}>`;
-            }).join(' ')} <:black_card:1322745250372128808> <:black_card:1322745250372128808>
-${communityCards.slice(0, 3).map(card => {
-                const suit = ['hearts_suit', 'diamonds_suit', 'clubs_suit', 'spades_suit'][card[0]];
-                return `<:${suit}:${emojiIds[suit]}>`;
-            }).join(' ')} <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843>`;
+            return `${communityCards.slice(0, 3).map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')} ${blackCard} ${blackCard}
+${communityCards.slice(0, 3).map(card => getSuitEmoji(card[0], emojis)).join(' ')} ${blankSuit} ${blankSuit}`;
         
         case 2: // Turn (4 cards)
-            return `${communityCards.slice(0, 4).map(card => {
-                const emoji = getEmoji(card[0], card[1]);
-                return `<:${emoji}:${emojiIds[emoji]}>`;
-            }).join(' ')} <:black_card:1322745250372128808>
-${communityCards.slice(0, 4).map(card => {
-                const suit = ['hearts_suit', 'diamonds_suit', 'clubs_suit', 'spades_suit'][card[0]];
-                return `<:${suit}:${emojiIds[suit]}>`;
-            }).join(' ')} <:blank_suit:1322745251491745843>`;
+            return `${communityCards.slice(0, 4).map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')} ${blackCard}
+${communityCards.slice(0, 4).map(card => getSuitEmoji(card[0], emojis)).join(' ')} ${blankSuit}`;
         
         case 3: // River (all 5 cards)
-            return `${communityCards.map(card => {
-                const emoji = getEmoji(card[0], card[1]);
-                return `<:${emoji}:${emojiIds[emoji]}>`;
-            }).join(' ')}
-${communityCards.map(card => {
-                const suit = ['hearts_suit', 'diamonds_suit', 'clubs_suit', 'spades_suit'][card[0]];
-                return `<:${suit}:${emojiIds[suit]}>`;
-            }).join(' ')}`;
+            return `${communityCards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${communityCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`;
     }
 }
 
-async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn) {
+async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis) { 
+    const blackCard = getEmoji(emojis, 'blank_card');
+    const blankSuit = getEmoji(emojis, 'blank_suit');
+
     // Assign positions based on number of players
     let dealerPlayer, smallBlindPlayer, bigBlindPlayer;
     
@@ -120,10 +82,9 @@ ${dealerPlayer.member.toString()} shuffled the deck and dealt the cards.
 ${smallBlindPlayer.member.toString()} payed the smll blind of ฅ${smallBlindAmount}.
 ${bigBlindPlayer.member.toString()} payed the big blind of ฅ${bigBlindAmount}.
 **Community Cards**:
-<:blank_card:1322745250372128808> <:blank_card:1322745250372128808> <:blank_card:1322745250372128808> <:blank_card:1322745250372128808> <:blank_card:1322745250372128808>
-<:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843> <:blank_suit:1322745251491745843>
+${blackCard} ${blackCard} ${blackCard} ${blackCard} ${blackCard}
+${blankSuit} ${blankSuit} ${blankSuit} ${blankSuit} ${blankSuit}
 Main Pot: ${pots[0].amount}`);
-
 
     const deck = shuffleDeck();
     const communityCards = deck.splice(0, 5);
@@ -134,21 +95,11 @@ Main Pot: ${pots[0].amount}`);
 
         // Sort the hand by card value, treating Aces as high
         player.hand.sort((a, b) => (b[1] === 1 ? 14 : b[1]) - (a[1] === 1 ? 14 : a[1]));
-        
-        // Construct the hand message
-        const valuesLine = player.hand.map(card => {
-            const emoji = getEmoji(card[0], card[1]);
-            return `<:${emoji}:${emojiIds[emoji]}>`;
-        }).join(' ');
-
-        const suitsLine = player.hand.map(card => {
-            const [suit] = card;
-            return ['<:hearts_suit:1322741717266464831>', '<:diamonds_suit:1322741715832143913>', '<:clubs_suit:1322739460776923167>', '<:spades_suit:1322741714795888701>'][suit];
-        }).join(' ');
 
         // Send the hand message as direct messages
         await player.member.send(`**Your hand:**
-${valuesLine}\n${suitsLine}`);
+${player.hand.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${player.hand.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`);
     }
 
     smallBlindPlayer.chips -= smallBlindAmount;
@@ -163,38 +114,38 @@ ${valuesLine}\n${suitsLine}`);
     }
     
     await channel.send(`## Time for initial bets`);
-    const [preflopPlayers, preflopPots, preflopFolded] = await playHoldemStage(players, pots, 0, communityCards, channel, conn);
-    if(preflopFolded || preflopPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, preflopPlayers, preflopPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+    const [preflopPlayers, preflopPots, preflopFolded] = await playHoldemStage(players, pots, 0, communityCards, channel, conn, emojis);
+    if(preflopFolded || preflopPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, preflopPlayers, preflopPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
    
     if(preflopPlayers.length === 2) preflopPlayers.reverse();
    
     await channel.send(`## Proceeding to the flop.
 **Community Cards**:
-${communityCardsString(communityCards, 1)}
+${communityCardsString(communityCards, 1, emojis)}
 Main Pot: ${preflopPots[0].amount}${preflopPots.length > 1 ? preflopPots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
-    const [flopPlayers, flopPots, flopFolded] = await playHoldemStage(preflopPlayers, preflopPots, 1, communityCards, channel, conn);
-    if(flopFolded || flopPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, flopPlayers, flopPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+    const [flopPlayers, flopPots, flopFolded] = await playHoldemStage(preflopPlayers, preflopPots, 1, communityCards, channel, conn, emojis);
+    if(flopFolded || flopPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, flopPlayers, flopPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
    
     await channel.send(`## Now it's time for the turn.
 **Community Cards**:
-${communityCardsString(communityCards, 2)}
+${communityCardsString(communityCards, 2, emojis)}
 Main Pot: ${flopPots[0].amount}${flopPots.length > 1 ? flopPots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
-    const [turnPlayers, turnPots, turnFolded] = await playHoldemStage(flopPlayers, flopPots, 2, communityCards, channel, conn);
-    if(turnFolded || turnPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, turnPlayers, turnPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+    const [turnPlayers, turnPots, turnFolded] = await playHoldemStage(flopPlayers, flopPots, 2, communityCards, channel, conn, emojis);
+    if(turnFolded || turnPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, turnPlayers, turnPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
    
     await channel.send(`## Sailing down the river!
 **Community Cards**:
-${communityCardsString(communityCards, 3)}
+${communityCardsString(communityCards, 3, emojis)}
 Main Pot: ${turnPots[0].amount}${turnPots.length > 1 ? turnPots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
-    const [riverPlayers, riverPots, riverFolded] = await playHoldemStage(turnPlayers, turnPots, 3, communityCards, channel, conn);
+    const [riverPlayers, riverPots, riverFolded] = await playHoldemStage(turnPlayers, turnPots, 3, communityCards, channel, conn, emojis);
     
     await channel.send("## It's the final showdown!");
-    return determineWinner(communityCards, riverPlayers, riverPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+    return determineWinner(communityCards, riverPlayers, riverPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
 }
 
-async function determineWinner(communityCards, players, pots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn) {    
+async function determineWinner(communityCards, players, pots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis) {    
     // Function to evaluate poker hands
-    const evaluateHand = (player, communityCards) => {
+    const evaluateHand = async(player, communityCards) => {
         const hand = [...player.hand, ...communityCards];
         
         // Sort the hand by card value, treating Aces as high
@@ -308,15 +259,22 @@ async function determineWinner(communityCards, players, pots, host, buyIn, small
                 ...hand.filter(card => card[1] === value),
                 ...hand.filter(card => card[1] !== value).slice(0, 1)
             ];
-        } else if (counts.includes(3) && counts.includes(2)) {
+        } else if (counts.filter(count => count >= 2).length >= 2 && counts.filter(count => count >= 3).length >= 1) {
             rank = 7;
             handName = "Full House";
-            const threeValue = Number(Object.keys(valueCounts).find(key => valueCounts[key] === 3));
-            const twoValue = Number(Object.keys(valueCounts).find(key => valueCounts[key] === 2));
+            handName = "Full House";
+            const threeValue = Number(Object.keys(valueCounts).find(key => valueCounts[key] >= 3));
+            const twoValue = Number(Object.keys(valueCounts).find(key => key != threeValue && valueCounts[key] >= 2));
             bestHand = [
-                ...hand.filter(card => card[1] === threeValue),
+                ...hand.filter(card => card[1] === threeValue).slice(0, 3),
                 ...hand.filter(card => card[1] === twoValue).slice(0, 2)
             ];
+            //give the Joey cat to user
+            const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+                [player.member.id, 9, player.member.displayName, 'Joey']);
+            if(userCatDB[0].affectedRows){
+                await channel.send({content: `<@${player.member.id}> just gained ownership of Joey by getting a full house! This unlocks the /shadowdale command (coming soon).`, files: ['images/cats/Joey.jpg']});
+            }
         } else if (isFlush) {
             rank = 6;
             handName = "Flush";
@@ -467,42 +425,21 @@ async function determineWinner(communityCards, players, pots, host, buyIn, small
     };
 
     const playersInGame = players.filter(player => !player.folded);
-    const results = playersInGame.map(player => evaluateHand(player, communityCards));
+    const results = await Promise.all(playersInGame.map(player => evaluateHand(player, communityCards)));
     const finalResults = breakTies(results);
 
     //reverse to list hands in ascending order
     finalResults.reverse();
 
+    const blankEmoji = getEmoji(emojis, 'blank');
+
     // Construct the message to show hands
     let handsMessage = "## Players' Hands:\n";
     finalResults.forEach(result => {
         result.forEach(player => {
-            let valuesLine = '';
-            let suitsLine = '';
-            
-            // Display best hand
-            player.bestHand.forEach(card => {
-                const emoji = getEmoji(card[0], card[1]);
-                valuesLine += `<:${emoji}:${emojiIds[emoji]}>`;
-                suitsLine += ['<:hearts_suit:1322741717266464831>', '<:diamonds_suit:1322741715832143913>', 
-                            '<:clubs_suit:1322739460776923167>', '<:spades_suit:1322741714795888701>'][card[0]];
-            });
-
-            // Add separator
-            valuesLine += `<:blank:826302290838290442>`;
-            suitsLine += `<:blank:826302290838290442>`;
-
-            // Display hole cards
-            player.hand.forEach(card => {
-                const emoji = getEmoji(card[0], card[1]);
-                valuesLine += `<:${emoji}:${emojiIds[emoji]}>`;
-                suitsLine += ['<:hearts_suit:1322741717266464831>', '<:diamonds_suit:1322741715832143913>', 
-                            '<:clubs_suit:1322739460776923167>', '<:spades_suit:1322741714795888701>'][card[0]];
-            });
-
             handsMessage += `${player.member.toString()} - ${player.handName}
-${valuesLine}
-${suitsLine}\n`;
+${player.bestHand.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')} ${blankEmoji} ${player.hand.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${player.bestHand.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ${blankEmoji} ${player.hand.map(card => getSuitEmoji(card[0], emojis)).join(' ')}\n`;
         });
     });
     await channel.send(handsMessage);
@@ -562,10 +499,10 @@ ${suitsLine}\n`;
     }
     await channel.send(winningMessage);
 
-    completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+    completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
 }
 
-async function completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn){
+async function completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis){
 
     let nexRoundStartTime = Math.ceil(Date.now()/1000)+62;
 
@@ -610,7 +547,7 @@ async function completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmo
         content: `## Round over!
 Players of the last round now have:
 ${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.chips === 0 ? ' (busted)' : ''}`).join('\n')}
-Next game starting <t:${nexRoundStartTime}:R>. 
+Host must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.. 
 Players can cash out now, new players can join, and the host can start the next round or cancel the game.
 ## Players in next game:
 ${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (host)' : ''}`).join('\n')}`,
@@ -659,6 +596,17 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                     hand: []
                 });
 
+                await message.edit({
+                    content: `## Round over!
+Players of the last round now have:
+${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.cashedOut ? ' (cashed out)' : player.chips === 0 ? ' (busted)' : ''}`).join('\n')}
+Host must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.. 
+Players can cash out now, new players can join, and the host can start the next round or cancel the game.
+## Players in next game:
+${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (host)' : ''}`).join('\n')}`,
+                    components: [actionRow]
+                });
+
                 await i.deferUpdate();
                 await channel.send(`${i.user.toString()} has joined the game with a buy-in of ฅ${buyIn}!`);
             } else if (i.customId === 'cashout') {
@@ -683,7 +631,7 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                 await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
                     [newAmount, highestScritchBucks, i.user.id]);
                 await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                    [i.user.id, player.chips, i.user.username]); // Record the chips being cashed out
+                    [i.user.id, newAmount, i.user.username]); // Record the chips being cashed out
 
                 players = players.filter(p => p.member.id !== i.user.id); // Remove player from players array
                 previousPlayers.find(p => p.member.id === i.user.id).cashedOut = true;
@@ -707,7 +655,7 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                     content: `## Round over!
 Players of the last round now have:
 ${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.cashedOut ? ' (cashed out)' : player.chips === 0 ? ' (busted)' : ''}`).join('\n')}
-Next game starting <t:${nexRoundStartTime}:R>. 
+Host must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.. 
 Players can cash out now, new players can join, and the host can start the next round or cancel the game.
 ## Players in next game:
 ${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (host)' : ''}`).join('\n')}`,
@@ -743,7 +691,7 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
     });
 
     collector.on('end', async (collected, reason) => {
-        if (reason !== 'cancelled' && players.length > 1) { 
+        if (reason === 'started' && players.length > 1) { 
             await message.edit({
                 content: `## Round over!
 Players of the last round now have:
@@ -752,7 +700,7 @@ ${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips
             });
 
             players.push(players.shift());
-            playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+            playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
             return;
         } else {
             // Cash out all remaining players
@@ -766,7 +714,7 @@ ${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips
                 await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
                     [newAmount, highestScritchBucks, player.member.id]);
                 await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                    [player.member.id, player.chips, player.member.user.username]);
+                    [player.member.id, newAmount, player.member.user.username]);
             }
 
             if (reason === 'cancelled') {                     
@@ -777,6 +725,14 @@ ${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips
                     components: []
                 });                               
                 await channel.send('Game cancelled by host. All players have been cashed out.');
+            } else if(reason === 'time'){
+                await message.edit({
+                    content: `## Round over!
+Players of the last round now have:
+${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.chips === 0 ? ' (busted)' : ' (cashed out)'}`).join('\n')}`,
+                    components: []
+                });                               
+                await channel.send('Game cancelled because the host did not start the game in time. All players have been cashed out.');
             } else {                             
                 await message.edit({
                     content: `## Round over!
@@ -843,7 +799,7 @@ function createLobbyButtons() {
     return new ActionRowBuilder().addComponents(join, start, cancel);
 }
 
-async function playHoldemStage(players, pots, stage, communityCards, channel, conn) {
+async function playHoldemStage(players, pots, stage, communityCards, channel, conn, emojis) {
     // Update the game timestamp in the database
     await conn.query('UPDATE `game` SET `start_time` = NOW() WHERE `channel_id` = ?;', [channel.id]);
 
@@ -879,7 +835,7 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
         }
 
         const message = await channel.send({
-            content: `${currentPlayer.member.toString()}, it's your turn! The call amount is ฅ${pots[0].ante} and your current bet is ฅ${currentPlayer.bet}. Act quick or you will fold <t:${Math.ceil(Date.now()/1000)+60}:R>.`,
+            content: `${currentPlayer.member.toString()}, it's your turn! You have ฅ${currentPlayer.chips} chips left. The call amount is ฅ${pots[0].ante} and your current bet is ฅ${currentPlayer.bet}. Act quick or you will fold <t:${Math.ceil(Date.now()/1000)+60}:R>.`,
             components: actionRow
         });
 
@@ -928,7 +884,7 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
 
                             await channel.send(`${currentPlayer.member.toString()} raised by ${raiseAmount}.
 **Community Cards**:
-${communityCardsString(communityCards, stage)}
+${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
 
                             currentPlayerIndex++;
@@ -939,7 +895,7 @@ Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\n
                             await i.deferUpdate();
                             await channel.send(`${currentPlayer.member.toString()} has folded.
 **Community Cards**:
-${communityCardsString(communityCards, stage)}
+${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                             currentPlayer.bet = 0;
                             currentPlayer.folded = true;
@@ -961,7 +917,7 @@ Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\n
                                 await i.deferUpdate();
                                 await channel.send(`${currentPlayer.member.toString()} has called.
 **Community Cards**:
-${communityCardsString(communityCards, stage)}
+${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                             }
                         } else if (i.customId === 'allin') {
@@ -974,7 +930,7 @@ Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\n
 
                                 await channel.send(`${currentPlayer.member.toString()} has gone all-in for ฅ${currentPlayer.chips}
 **Community Cards**:
-${communityCardsString(communityCards, stage)}
+${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                             } else {
                                 pots[0].amount -= currentPlayer.bet - currentPlayer.chips;
@@ -983,7 +939,7 @@ Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\n
                                     if(pots[i] && currentPlayer.bet === pots[i].ante) {
                                         pots[i].amount += currentPlayer.chips;
                                         await channel.send(`${currentPlayer.member.toString()} has gone all-in, joining the ฅ${pots[i].amount} side pot!**Community Cards**:
-${communityCardsString(communityCards, stage)}
+${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                                         sidePotMatch = true;
                                         break;
@@ -995,7 +951,7 @@ Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\n
                                         ante: currentPlayer.bet
                                     });
                                     await channel.send(`${currentPlayer.member.toString()} has gone all-in, creating a side pot of ฅ${currentPlayer.bet}!**Community Cards**:
-${communityCardsString(communityCards, stage)}
+${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}${pots.length > 1 ? pots.slice(1).map((pot, i) => `\nSide Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                                 }
                             }
@@ -1054,10 +1010,17 @@ module.exports = {
                 .setDescription('Amount of scritch bucks to buy in with')
                 .setRequired(true)),
     game: true,
-    async execute(interaction, pool) {        
+    async execute(interaction, pool, emojis) { 
         const buyIn = interaction.options.getInteger('buy_in');
         const channel = interaction.channel;
         const startTime = Date.now();
+
+        if(buyIn < 5){
+            return interaction.reply({
+                content: "Buy-in must be at least ฅ5.",
+                ephemeral: true
+            });
+        }
         
         // Get database connection
         const conn = await pool.getConnection();
@@ -1206,19 +1169,19 @@ ${players.map(player => player.member.toString()).join('\n')}`,
                         components: [],
                     });
 
-                    return playHoldemRound(players, interaction.member, buyIn, smallBlindAmount, bigBlindAmount, channel, conn);
+                    return playHoldemRound(players, interaction.member, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
                 } else if (reason === 'cancelled') {
                     await interaction.editReply({
                         content: `Game cancelled by host. All buy-ins have been refunded.
 ## Players
-${players.map(player => player.member.toString() + ' (cashed out)').join('\n')}`,
+${players.map(player => player.member.toString() + ' (refunded)').join('\n')}`,
                         components: []
                     });
                 } else {
                     await interaction.editReply({
                         content: `Game cancelled: Not enough players joined within the time limit. All buy-ins have been refunded.
 ## Players
-${players.map(player => player.member.toString() + '(cashed out)').join('\n')}`,
+${players.map(player => player.member.toString() + '(refunded)').join('\n')}`,
                         components: []
                     });
                 }

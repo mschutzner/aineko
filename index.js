@@ -6,6 +6,8 @@ const { Campaign } = require('patreon-discord');
 const { stage, lurkerMin, memberMin, regularMin, championMin, decayRate, tickRate, facepalms } = require("./config.json");
 const { sleep, randInt, unixToMysqlDatetime} = require("./utils.js");
 
+const emojis = [];
+
 // Create a new client instance
 const client = new Client({ 
 	intents: [
@@ -127,7 +129,7 @@ client.on("interactionCreate", async interaction => {
 			}, command.cooldown);
 		} 
 
-		await command.execute(interaction, pool);
+		await command.execute(interaction, pool, emojis);
 		
 	} catch (error) {
 		console.error(error);
@@ -691,8 +693,7 @@ async function questionLoop(){
 	setTimeout(async () => {
 		const conn = await pool.getConnection();
 		try{
-			
-			const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1;');
+			const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1 AND `question_channel` IS NOT NULL;');
 			for await(const guildDB of guildsDB[0]){
 				if(!guildDB.question_channel) continue;
 				const guild = await client.guilds.fetch(guildDB.guild_id);
@@ -829,6 +830,21 @@ async function timerSetup(){
 // Login to Discord with your client's token
 client.once("ready", async () => {
 	client.user.setPresence({ activities: [{ name: 'aineko.gg' }], status: 'available' });
+
+	
+	
+	const testGuild = await client.guilds.fetch(process.env.TEST_GUILD_ID);
+	const fetchedEmojis = await testGuild.emojis.fetch()
+	// Map them to an object for easy access
+	fetchedEmojis.forEach(emoji => {
+		emojis.push({
+			id: emoji.id,
+			name: emoji.name,
+			animated: emoji.animated,
+			// Format for use in messages
+			toString: () => `<${emoji.animated ? 'a' : ''}:${emoji.name}:${emoji.id}>`
+		});
+	});
   
 	const conn = await pool.getConnection();
 	try{
@@ -895,8 +911,8 @@ client.once("ready", async () => {
 	
 	questionLoop();
 
-	patreonLoop();
-	setInterval(async () => { await patreonLoop(); }, 3600000);
+	// patreonLoop();
+	// setInterval(async () => { await patreonLoop(); }, 3600000);
 
 	timerSetup();
 

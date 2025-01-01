@@ -145,6 +145,7 @@ const evaluateHand = (player, communityCards) => {
     }
 
     const isLowStraightFlush = !isHighStraightFlush && sameSuitCards.some(card => card[1] === 1) && sameSuitCards.some(card => card[1] === 2) && sameSuitCards.some(card => card[1] === 3) && sameSuitCards.some(card => card[1] === 4) && sameSuitCards.some(card => card[1] === 5);
+    
 
     let isHighStraight;
     straightLength = 0;
@@ -205,15 +206,17 @@ const evaluateHand = (player, communityCards) => {
             ...hand.filter(card => card[1] === value),
             ...hand.filter(card => card[1] !== value).slice(0, 1)
         ];
-    } else if (counts.includes(3) && counts.includes(2)) {
+    } else if (counts.filter(count => count >= 2).length >= 2 && counts.filter(count => count >= 3).length >= 1) {
         rank = 7;
         handName = "Full House";
-        const threeValue = Number(Object.keys(valueCounts).find(key => valueCounts[key] === 3));
-        const twoValue = Number(Object.keys(valueCounts).find(key => valueCounts[key] === 2));
+        handName = "Full House";
+        const threeValue = Number(Object.keys(valueCounts).find(key => valueCounts[key] >= 3));
+        const twoValue = Number(Object.keys(valueCounts).find(key => key != threeValue && valueCounts[key] >= 2));
         bestHand = [
-            ...hand.filter(card => card[1] === threeValue),
+            ...hand.filter(card => card[1] === threeValue).slice(0, 3),
             ...hand.filter(card => card[1] === twoValue).slice(0, 2)
         ];
+        //give joey
     } else if (isFlush) {
         rank = 6;
         handName = "Flush";
@@ -288,7 +291,6 @@ const evaluateHand = (player, communityCards) => {
         bestHand
     };
 };
-
 
 const breakTies = (results) => {
     // Group results by rank
@@ -382,23 +384,41 @@ const rankTally = {
     "Royal Flush": 0
 };
 
-for(let i = 0; i < 10000; i++){
-    const deck = shuffleDeck();
-    const communityCards = deck.splice(0, 5);
-    // let communityCards = [[1,7],[0,13],[0,12],[0,11],[0,10]];
-    const players = [];
-    while(deck.length > 1){
-        const hand = deck.splice(0, 2).sort((a, b) => b[1] - a[1]);
-        players.push({hand});
-    }
+// for(let i = 0; i < 10000; i++){
+//     const deck = shuffleDeck();
+//     const communityCards = deck.splice(0, 5);
+//     // let communityCards = [[1,7],[0,13],[0,12],[0,11],[0,10]];
+//     const players = [];
+//     while(deck.length > 1){
+//         const hand = deck.splice(0, 2).sort((a, b) => b[1] - a[1]);
+//         players.push({hand});
+//     }
 
-    const results = players.map(player => evaluateHand(player, communityCards));
-    const { winners, finalResults } = breakTies(results);
-    // console.log(`Shuffling and dealing! ${communityCards}`);
-    finalResults.reverse();
-    for(const bracket of finalResults){
-        // console.log(bracket[0].bestHand, bracket[0].handName, bracket[0].hand, bracket.length);
-        for(const player of bracket) rankTally[player.handName]++;
-    }
+//     const results = players.map(player => evaluateHand(player, communityCards));
+//     const { winners, finalResults } = breakTies(results);
+//     // console.log(`Shuffling and dealing! ${communityCards}`);
+//     finalResults.reverse();
+//     for(const bracket of finalResults){
+//         // console.log(bracket[0].bestHand, bracket[0].handName, bracket[0].hand, bracket.length);
+//         for(const player of bracket) rankTally[player.handName]++;
+//     }
+// }
+// console.log("ran 10,000 decks", rankTally)
+
+const deck = shuffleDeck();
+// const communityCards = deck.splice(0, 5);
+let communityCards = [[1,7],[0,7],[0,7],[0,1],[1,1]];
+const players = [];
+while(deck.length > 1){
+    const hand = deck.splice(0, 2).sort((a, b) => b[1] - a[1]);
+    players.push({hand});
 }
-console.log("ran 10,000 decks", rankTally);
+players.push({hand: [[1,7],[1,7]]});
+
+const results = players.map(player => evaluateHand(player, communityCards));
+const { winners, finalResults } = breakTies(results);
+console.log(`Shuffling and dealing! ${communityCards}`);
+finalResults.reverse();
+for(const bracket of finalResults){
+    console.log(bracket[0].bestHand, bracket[0].handName, bracket[0].hand, bracket.length);
+};
