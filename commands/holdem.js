@@ -126,21 +126,99 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
             bigBlindPlayer.totalBet = bigBlindPlayer.chips;
             bigBlindPlayer.chips = 0;
             bigBlindPlayer.allIn = true;
-            if(bigBlindPlayer.bet === bigBlindAmount){
+            if(bigBlindPlayer.totalBet === bigBlindAmount){
                 bigBlindMessage = `${bigBlindPlayer.member.toString()} must go all in for ฅ${bigBlindPlayer.bet} to pay the big blind.`;
             } else {
-                bigBlindMessage = `${bigBlindPlayer.member.toString()} can not afford the big blind and the game must go all in making the effective big blind ฅ${bigBlindPlayer.bet}.`;
+                bigBlindMessage = `${bigBlindPlayer.member.toString()} can not afford the big blind and must go all in making the effective big blind ฅ${bigBlindPlayer.bet}.`;
             }
         } else {
             bigBlindPlayer.bet = bigBlindAmount;
             bigBlindPlayer.totalBet = bigBlindAmount;
             bigBlindPlayer.chips -= bigBlindAmount;
         }
+
         pots[0].amount += bigBlindPlayer.bet;
         pots[0].ante = bigBlindPlayer.bet;
+
+        if(smallBlindPlayer.allIn){
+            bigBlindPlayer.bet -= smallBlindPlayer.bet;
+            
+            pots[0].amount -= smallBlindPlayer.bet * 2;
+            pots[0].ante -= smallBlindPlayer.bet; 
+            pots[0].players = pots[0].players.filter(player => player.member.id !== smallBlindPlayer.member.id);
+    
+            //make the side pot
+            pots.push({
+                amount: smallBlindPlayer.bet * 2,
+                ante: smallBlindPlayer.bet,
+                players: [bigBlindPlayer, smallBlindPlayer],
+            });
+
+            if(bigBlindPlayer.totalBet < bigBlindAmount){
+                bigBlindMessage = `${bigBlindPlayer.member.toString()} can not afford the big blind and must go all in and ${smallBlindPlayer.member.toString()} cannot match the bet so side pot 1 was created and the effective big blind is ฅ${pots[0].ante}.`;
+            } else {
+                bigBlindMessage += `\n${smallBlindPlayer.member.toString()} cannot match the bet so side pot 1 was created making the effective big blind ฅ${pots[0].ante}.`;
+            }
+
+        }
+    }
+
+
+    const deck = shuffleDeck();
+
+    const communityCards = deck.splice(0, 5);
+    
+    // const communityCards = [
+    //     [0, 2],
+    //     [1, 4],
+    //     [2, 6],
+    //     [3, 8],
+    //     [0, 10]
+    // ];
+
+    for (const player of players) {
+        //deal 2 cards to each player
+        player.hand = deck.splice(0, 2);
+
+        // Sort the hand by card value, treating Aces as high
+        player.hand.sort((a, b) => (b[1] === 1 ? 14 : b[1]) - (a[1] === 1 ? 14 : a[1]));
+    }
+
+    // players[0].hand = [
+    //     [0, 3],
+    //     [1, 5]
+    // ];
+    // players[1].hand = [
+    //     [2, 7],
+    //     [3, 9]
+    // ];
+
+    // players[0].chips = 15;
+    // players[1].chips = 5;
+    
+    // skip bets if there is one or less player not all in
+    if(players.filter(player => !player.allIn).length <= 1){
+        let explination;
+        if(players.filter(player => !player.allIn).length === 0){
+            explination = `## All players are all in so continuing to results.`;
+        } else {
+            explination = `## There is only one player not all in so continuing to results.`;
+        }
+
+
+        await channel.send(`## Game started!
+${dealerPlayer.member.toString()} shuffled the deck and dealt the cards to your direct messages.
+${smallBlindMessage}
+${bigBlindMessage}
+${explination}
+**Community Cards**:
+${communityCardsString(communityCards, 3, emojis)}
+Main Pot: ${pots[0].amount}
+${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+
+        return determineWinner(communityCards, players, pots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
     }
     
-
     // Send game start message to the channel
     await channel.send(`## Game started!
 ${dealerPlayer.member.toString()} shuffled the deck and dealt the cards to your direct messages.
@@ -152,21 +230,9 @@ ${blankSuit} ${blankSuit} ${blankSuit} ${blankSuit} ${blankSuit}
 Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
 
-    const deck = shuffleDeck();
-    const communityCards = deck.splice(0, 5);
-
-    for (const player of players) {
-        //deal 2 cards to each player
-        player.hand = deck.splice(0, 2);
-
-        // Sort the hand by card value, treating Aces as high
-        player.hand.sort((a, b) => (b[1] === 1 ? 14 : b[1]) - (a[1] === 1 ? 14 : a[1]));
-
-        // Send the hand message as direct messages
-        await player.member.send(`**Your hand:**
+    for (const player of players) await player.member.send(`**Your hand:**
 ${player.hand.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
 ${player.hand.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`);
-    }
 
     if (players.length > 2) {
         const firstPlayer = players.shift();
@@ -515,58 +581,51 @@ ${player.bestHand.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ${blankE
 
     //distribute pots
     for(const pot of pots) {
-        // Helper function to distribute pot to winners of a specific rank
-        const distributePotToRank = (potentialWinners, rankIndex = 0) => {
-            // If we've checked all ranks and found no winners, something is wrong
-            if(rankIndex >= finalResults.length) {
-                console.error('No winners found in any rank for pot:', pot);
-                return;
+        // Get all potential winners for this pot (not folded and in pot.players)
+        let potWinners = [];
+        for(const group of finalResults){
+            for(const player of group){
+                if(!player.folded && pot.players.some(p => p.member.id === player.member.id)){
+                    potWinners.push(player);
+                }
             }
+            if(potWinners.length > 0) break;
+        }
 
-            // Get winners at current rank who are eligible for this pot
-            const currentRankWinners = finalResults[rankIndex]
-                .filter(player => 
-                    !player.folded && 
-                    pot.players.some(p => p.member.id === player.member.id)
-                );
+        if(potWinners.length === 0) {
+            // If no eligible winners for this pot, distribute it to the overall winners
+            const highestRankGroup = finalResults[0];
+            const winAmount = Math.floor(pot.amount / highestRankGroup.length);
+            const remainder = pot.amount % highestRankGroup.length;
 
-            // If no winners at this rank, try next rank
-            if(currentRankWinners.length === 0) {
-                return distributePotToRank(potentialWinners, rankIndex + 1);
-            }
-
-            // Split pot amount among winners
-            const winAmount = Math.floor(pot.amount / currentRankWinners.length);
-            const remainder = pot.amount % currentRankWinners.length;
-
-            // Distribute winnings and track for message
-            currentRankWinners.forEach((winner, index) => {
-                // Add remainder to first winner if pot can't be split evenly
+            highestRankGroup.forEach((winner, index) => {
                 const extraChip = index === 0 ? remainder : 0;
                 const totalWin = winAmount + extraChip;
                 
-                // Initialize won property if it doesn't exist
                 if(!winner.won) winner.won = 0;
                 winner.won += totalWin;
                 winner.chips += totalWin;
             });
-        };
 
-        // Get all potential winners for this pot (not folded and in pot.players)
-        const potentialWinners = finalResults
-            .flatMap(group => group)
-            .filter(player => 
-                !player.folded && 
-                pot.players.some(p => p.member.id === player.member.id)
-            );
-
-        if(potentialWinners.length === 0) {
-            console.error('No potential winners found for pot:', pot);
+            await channel.send(`No eligible winners for pot of ฅ${pot.amount}, distributing to highest ranked player(s).`);
             continue;
         }
 
-        // Start distribution from highest rank (index 0)
-        distributePotToRank(potentialWinners);
+        // Split pot amount among winners
+        const winAmount = Math.floor(pot.amount / potWinners.length);
+        const remainder = pot.amount % potWinners.length;
+
+        // Distribute winnings and track for message
+        potWinners.forEach((winner, index) => {
+            // Add remainder to first winner if pot can't be split evenly
+            const extraChip = index === 0 ? remainder : 0;
+            const totalWin = winAmount + extraChip;
+            
+            // Initialize won property if it doesn't exist
+            if(!winner.won) winner.won = 0;
+            winner.won += totalWin;
+            winner.chips += totalWin;
+        });
     }
 
     let winningMessage = '';
@@ -587,6 +646,8 @@ ${player.bestHand.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ${blankE
 }
 
 async function completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis){
+    // Update the game timestamp in the database
+    await conn.query('UPDATE `game` SET `start_time` = NOW() WHERE `channel_id` = ?;', [channel.id]);
 
     let nexRoundStartTime = Math.ceil(Date.now()/1000)+62;
 
@@ -606,7 +667,8 @@ async function completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmo
     // Check if host is no longer in players
     let newHost = false;
     if (!players.some(player => player.member.id === host.id)) {
-        host = players[0].member;
+        const sortedPlayers = players.sort((a, b) => b.chips - a.chips);
+        host = sortedPlayers[0].member;
         newHost = true;
     }
 
@@ -727,7 +789,8 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                 previousPlayers.find(p => p.member.id === i.user.id).cashedOut = true;
 
                 if (players.length >= 1 && i.user.id === host.id) {
-                    host = players[0].member;
+                    const sortedPlayers = players.sort((a, b) => b.chips - a.chips);
+                    host = sortedPlayers[0].member;
                     newHost = true;
                     await i.reply(`${i.user.toString()} has cashed out ${player.chips} scritch bucks. ${host.toString()} is now the new host!`);
                 } else if(players.length === 0){
@@ -920,7 +983,7 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
         }
 
         const message = await channel.send({
-            content: `${currentPlayer.member.toString()}, it's your turn! You have ฅ${currentPlayer.chips} chips left. The call amount is ฅ${pots[0].ante} and your current bet is ฅ${currentPlayer.bet}. Act quick or you will fold <t:${Math.ceil(Date.now()/1000)+60}:R>.`,
+            content: `${currentPlayer.member.toString()}, it's your turn! You have ฅ${currentPlayer.chips} chips left. The call amount is ฅ${pots[0].ante} and your current bet is ฅ${currentPlayer.bet}${pots[0].ante - currentPlayer.bet >= currentPlayer.chips ? ' and you must go all in to continue' : ''}. Act quick or you will fold <t:${Math.ceil(Date.now()/1000)+60}:R>.`,
             components: actionRow
         });
 
@@ -1082,6 +1145,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                         //check if matches existing side pot
                                         let sidePotMatch = false;
                                         for(let i = 1; i < pots.length; i++){
+                                            if(pots[i].players.some(p => p.member.id === shortStackedPlayer.member.id)) continue;
                                             if(pots[i].ante === shortStackedPlayer.bet) {
                                                 sidePotMatch = i;
                                                 break;
@@ -1149,7 +1213,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                     pots[0].ante -= currentPlayer.bet; //reduce the ante for the main pot
                                     let sidePotAmount = currentPlayer.bet;
                                     let sidePotPlayers = [currentPlayer];
-                                    for(const player of pots[0].players){ //remove all bet from the main pot for all players in the main pot
+                                    for(const player of pots[0].players){ //remove bet from the main pot for all players in the main pot
                                         if(player.member.id === currentPlayer.member.id) continue;  
                                         if(player.bet >= currentPlayer.bet){
                                             pots[0].amount -= currentPlayer.bet;
@@ -1391,10 +1455,6 @@ ${players.map(player => `${player.member.toString()}${players[0].member.id === p
 ## Players
 ${players.map(player => `${player.member.toString()}${players[0].member.id === player.member.id ? ' (host)' : ''}`).join('\n')}`,
                         components: [],
-                    });
-
-                    players.forEach(player => {
-                        player.chips = 1;
                     });
                     
                     return playHoldemRound(players, interaction.member, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
