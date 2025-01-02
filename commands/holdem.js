@@ -63,6 +63,12 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
 
     // Assign positions based on number of players
     let dealerPlayer, smallBlindPlayer, bigBlindPlayer;
+
+    const pots = [
+        {
+            players: [...players]
+        }
+    ];
     
     if (players.length > 2) {
         dealerPlayer = players[0];
@@ -74,70 +80,77 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
         bigBlindPlayer = players[1];
     }
 
-    if(smallBlindPlayer.chips < smallBlindAmount){
-        // Cash out all remaining players
-        for (const player of players) {
-            // Get current scritch_bucks before cash out
-            const cashoutUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [player.member.id]);
-            const newAmount = cashoutUserDB[0][0].scritch_bucks + player.chips;
-            const highestScritchBucks = Math.max(newAmount, cashoutUserDB[0][0].scritch_bucks_highscore);
-
-            // Update scritch_bucks and record transaction
-            await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-                [newAmount, highestScritchBucks, player.member.id]);
-            await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                [player.member.id, newAmount, player.member.user.username]);
+    let smallBlindMessage = `${smallBlindPlayer.member.toString()} payed the small blind of ฅ${smallBlindAmount}.`;
+    if(smallBlindPlayer.chips <= smallBlindAmount){
+        smallBlindPlayer.bet = smallBlindPlayer.chips;
+        smallBlindPlayer.totalBet = smallBlindPlayer.chips;
+        smallBlindPlayer.chips = 0;
+        smallBlindPlayer.allIn = true;
+        if(smallBlindPlayer.bet === smallBlindAmount){
+            smallBlindMessage = `${smallBlindPlayer.member.toString()} must go all in to pay the small blind of ฅ${smallBlindPlayer.bet}.`;
+        } else {
+            smallBlindMessage = `${smallBlindPlayer.member.toString()} can not afford the small blind and the game must go all in for ฅ${smallBlindPlayer.bet}.`;
         }
-        await channel.send(`${smallBlindPlayer.member.toString()} can not afford the small blind and the game must end to prevent a stack overflow. All players have been cashed out.`);
-        await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id])
-            .catch(console.error);
-        return;
+    } else {
+        smallBlindPlayer.bet = smallBlindAmount;
+        smallBlindPlayer.totalBet = smallBlindAmount;
+        smallBlindPlayer.chips -= smallBlindAmount;
     }
-    if(bigBlindPlayer.chips < bigBlindAmount){
-        // Cash out all remaining players
-        for (const player of players) {
-            // Get current scritch_bucks before cash out
-            const cashoutUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [player.member.id]);
-            const newAmount = cashoutUserDB[0][0].scritch_bucks + player.chips;
-            const highestScritchBucks = Math.max(newAmount, cashoutUserDB[0][0].scritch_bucks_highscore);
-
-            // Update scritch_bucks and record transaction
-            await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-                [newAmount, highestScritchBucks, player.member.id]);
-            await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                [player.member.id, newAmount, player.member.user.username]);
-        }
-        await channel.send(`${bigBlindPlayer.member.toString()} can not afford the big blind and the game must end to prevent a stack overflow. All players have been cashed out.`);
-        await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id])
-            .catch(console.error);
-        return;
-    }
-
-    smallBlindPlayer.chips -= smallBlindAmount;
-    bigBlindPlayer.chips -= bigBlindAmount;
     
-    smallBlindPlayer.bet = smallBlindAmount;
-    bigBlindPlayer.bet = bigBlindAmount;
-    smallBlindPlayer.totalBet = smallBlindAmount;
-    bigBlindPlayer.totalBet = bigBlindAmount;
+    pots[0].amount = smallBlindPlayer.bet;
+    pots[0].ante = smallBlindPlayer.bet;
 
-    const pots = [
-        {
-            amount: smallBlindAmount + smallBlindAmount,
-            ante: bigBlindAmount,
-            players: [...players]
+    let bigBlindMessage = `${bigBlindPlayer.member.toString()} payed the big blind of ฅ${bigBlindAmount}.`
+    if(bigBlindPlayer.chips < smallBlindPlayer.bet){
+        bigBlindPlayer.bet = bigBlindPlayer.chips;
+        bigBlindPlayer.totalBet = bigBlindPlayer.chips;
+        bigBlindPlayer.chips = 0;
+        bigBlindPlayer.allIn = true;
+        pots[0].players = pots[0].players.filter(player => player.member.id !== bigBlindPlayer.member.id);
+
+        smallBlindPlayer.bet = pots[0].ante;
+        
+        pots[0].amount -= bigBlindPlayer.bet;
+        pots[0].ante -= bigBlindPlayer.bet; 
+
+        //make the side pot
+        pots.push({
+            amount: bigBlindPlayer.bet * 2,
+            ante: bigBlindPlayer.bet,
+            players: [bigBlindPlayer, smallBlindPlayer],
+        });
+        bigBlindMessage = `${bigBlindPlayer.member.toString()} can not afford the big blind and the game must go all in, creating side pot 1, and making the effective big blind ฅ${pots[0].ante}.`;
+    } else {
+        if(bigBlindPlayer.chips <= bigBlindAmount){
+            bigBlindPlayer.bet = bigBlindPlayer.chips;
+            bigBlindPlayer.totalBet = bigBlindPlayer.chips;
+            bigBlindPlayer.chips = 0;
+            bigBlindPlayer.allIn = true;
+            if(bigBlindPlayer.bet === bigBlindAmount){
+                bigBlindMessage = `${bigBlindPlayer.member.toString()} must go all in for ฅ${bigBlindPlayer.bet} to pay the big blind.`;
+            } else {
+                bigBlindMessage = `${bigBlindPlayer.member.toString()} can not afford the big blind and the game must go all in making the effective big blind ฅ${bigBlindPlayer.bet}.`;
+            }
+        } else {
+            bigBlindPlayer.bet = bigBlindAmount;
+            bigBlindPlayer.totalBet = bigBlindAmount;
+            bigBlindPlayer.chips -= bigBlindAmount;
         }
-    ];
+        pots[0].amount += bigBlindPlayer.bet;
+        pots[0].ante = bigBlindPlayer.bet;
+    }
+    
 
     // Send game start message to the channel
     await channel.send(`## Game started!
 ${dealerPlayer.member.toString()} shuffled the deck and dealt the cards to your direct messages.
-${smallBlindPlayer.member.toString()} payed the small blind of ฅ${smallBlindAmount}.
-${bigBlindPlayer.member.toString()} payed the big blind of ฅ${bigBlindAmount}.
+${smallBlindMessage}
+${bigBlindMessage}
 **Community Cards**:
 ${blackCard} ${blackCard} ${blackCard} ${blackCard} ${blackCard}
 ${blankSuit} ${blankSuit} ${blankSuit} ${blankSuit} ${blankSuit}
-Main Pot: ${pots[0].amount}`);
+Main Pot: ${pots[0].amount}
+${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
 
     const deck = shuffleDeck();
     const communityCards = deck.splice(0, 5);
@@ -563,7 +576,7 @@ ${player.bestHand.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ${blankE
             if(player.won) winners.push(player);
         }
     }
-    winners.sort((a, b) => b.won - a.won);
+    winners.sort((a, b) => a.won - b.won);
     winners.forEach(winner => {
         winningMessage += `# ${winner.member.toString()} won ฅ${winner.won} with ${winner.handName}!\n`;
         players.find(p => p.member.id === winner.member.id).chips = winner.chips;
@@ -589,111 +602,6 @@ async function completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmo
 
     //remove busted players
     players = players.filter(player => player.chips > 0);
-
-    //cash out players who can't pay small blind
-    let smallBlindPlayer;
-    while(!smallBlindPlayer){
-        if(players.length < 2){
-            const player = players[0];
-
-            const cashoutUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [player.member.id]);
-            const newAmount = cashoutUserDB[0][0].scritch_bucks + player.chips;
-            const highestScritchBucks = Math.max(newAmount, cashoutUserDB[0][0].scritch_bucks_highscore);
-
-            // Update scritch_bucks and record transaction
-            await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-                [newAmount, highestScritchBucks, player.member.id]);
-            await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                [player.member.id, newAmount, player.member.user.username]);
-                
-            const message = await channel.send(`## Game Ended
-Players of the last round now have:
-${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.chips === 0 ? ' (busted)' : ' (cashed out)'}`).join('\n')}`);
-            
-            await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id])
-            .catch(console.error);
-
-            return;
-        } else if(players[1].chips < bigBlindAmount){
-            const player = players[1];
-            previousPlayers.find(p => p.member.id === player.member.id).cashedOut = true;
-            players = players.filter(p => p.member.id !== player.member.id); // Remove player from players array
-            
-            const cashoutUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [player.member.id]);
-            const newAmount = cashoutUserDB[0][0].scritch_bucks + player.chips;
-            const highestScritchBucks = Math.max(newAmount, cashoutUserDB[0][0].scritch_bucks_highscore);
-
-            await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-                [newAmount, highestScritchBucks, player.member.id]);
-            await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                [player.member.id, newAmount, player.member.user.username]);
-
-            await channel.send(`${player.member.toString()} can not afford the big blind and has been cashed out for ฅ${player.chips}.`);
-        } else {
-            smallBlindPlayer = players[1];
-        }
-    }
-
-    let bigBlindPlayer;
-    while(!bigBlindPlayer){
-        if(players.length < 2){
-            const player = players[0];
-
-            const cashoutUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [player.member.id]);
-            const newAmount = cashoutUserDB[0][0].scritch_bucks + player.chips;
-            const highestScritchBucks = Math.max(newAmount, cashoutUserDB[0][0].scritch_bucks_highscore);
-
-            // Update scritch_bucks and record transaction
-            await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-                [newAmount, highestScritchBucks, player.member.id]);
-            await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                [player.member.id, newAmount, player.member.user.username]);
-                
-            const message = await channel.send(`## Game Ended
-Players of the last round now have:
-${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.chips === 0 ? ' (busted)' : ' (cashed out)'}`).join('\n')}`);
-            
-            await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id])
-            .catch(console.error);
-
-            return;
-        } else if(players.length < 4){
-            if(players[0].chips < bigBlindAmount){
-                const player = players[0];
-                previousPlayers.find(p => p.member.id === player.member.id).cashedOut = true;
-                players = players.filter(p => p.member.id !== player.member.id); // Remove player from players array
-                
-                const cashoutUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [player.member.id]);
-                const newAmount = cashoutUserDB[0][0].scritch_bucks + player.chips;
-                const highestScritchBucks = Math.max(newAmount, cashoutUserDB[0][0].scritch_bucks_highscore);
-    
-                await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-                    [newAmount, highestScritchBucks, player.member.id]);
-                await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                    [player.member.id, newAmount, player.member.user.username]);
-    
-                await channel.send(`${player.member.toString()} can not afford the big blind and has been cashed out for ฅ${player.chips}.`);
-            } else {
-                bigBlindPlayer = players[1];
-            }
-        } else if(players[2].chips < bigBlindAmount){
-            const player = players[2];
-            previousPlayers.find(p => p.member.id === player.member.id).cashedOut = true;
-                
-            const cashoutUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [player.member.id]);
-            const newAmount = cashoutUserDB[0][0].scritch_bucks + player.chips;
-            const highestScritchBucks = Math.max(newAmount, cashoutUserDB[0][0].scritch_bucks_highscore);
-
-            await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-                [newAmount, highestScritchBucks, player.member.id]);
-            await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                [player.member.id, newAmount, player.member.user.username]);
-
-            await channel.send(`${player.member.toString()} can not afford the big blind and has been cashed out for ฅ${player.chips}.`);
-        } else {
-            bigBlindPlayer = players[2];
-        }
-    }
 
     // Check if host is no longer in players
     let newHost = false;
@@ -887,6 +795,7 @@ ${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips
             });
 
             players.push(players.shift());
+
             playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
             return;
         } else {
@@ -1070,8 +979,10 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                                     //check if matches existing side pot
                                     let sidePotMatch = false;
                                     for(let i = 1; i < pots.length; i++){
-                                        if(pots[i].ante === shortStackedPlayer.bet) sidePotMatch = i;
-                                        break;
+                                        if(pots[i].ante === shortStackedPlayer.bet) {
+                                            sidePotMatch = i;
+                                            break;
+                                        }
                                     }
                                     if(sidePotMatch){ //add to existing side pot
                                         pots[0].amount -= pots[sidePotMatch].ante;
@@ -1171,8 +1082,10 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                         //check if matches existing side pot
                                         let sidePotMatch = false;
                                         for(let i = 1; i < pots.length; i++){
-                                            if(pots[i].ante === shortStackedPlayer.bet) sidePotMatch = i;
-                                            break;
+                                            if(pots[i].ante === shortStackedPlayer.bet) {
+                                                sidePotMatch = i;
+                                                break;
+                                            }
                                         }
                                         if(sidePotMatch){ //add to existing side pot
                                             pots[0].amount -= pots[sidePotMatch].ante;
@@ -1217,8 +1130,10 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                 //check if matches existing side pot
                                 let sidePotMatch = false;
                                 for(let i = 1; i < pots.length; i++){
-                                    if(pots[i].ante === currentPlayer.bet) sidePotMatch = i;
-                                    break;
+                                    if(pots[i].ante === currentPlayer.bet) {
+                                        sidePotMatch = i;
+                                        break;
+                                    }
                                 }
                                 if(sidePotMatch){ //add to existing side pot
                                     pots[0].amount -= pots[sidePotMatch].ante;
@@ -1478,6 +1393,10 @@ ${players.map(player => `${player.member.toString()}${players[0].member.id === p
                         components: [],
                     });
 
+                    players.forEach(player => {
+                        player.chips = 1;
+                    });
+                    
                     return playHoldemRound(players, interaction.member, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
                 } else if (reason === 'cancelled') {
                     await interaction.editReply({
