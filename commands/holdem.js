@@ -83,7 +83,6 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
     let smallBlindMessage = `${smallBlindPlayer.member.toString()} payed the small blind of ฅ${smallBlindAmount}.`;
     if(smallBlindPlayer.chips <= smallBlindAmount){
         smallBlindPlayer.bet = smallBlindPlayer.chips;
-        smallBlindPlayer.totalBet = smallBlindPlayer.chips;
         smallBlindPlayer.chips = 0;
         smallBlindPlayer.allIn = true;
         if(smallBlindPlayer.bet === smallBlindAmount){
@@ -93,7 +92,6 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
         }
     } else {
         smallBlindPlayer.bet = smallBlindAmount;
-        smallBlindPlayer.totalBet = smallBlindAmount;
         smallBlindPlayer.chips -= smallBlindAmount;
     }
     
@@ -103,7 +101,6 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
     let bigBlindMessage = `${bigBlindPlayer.member.toString()} payed the big blind of ฅ${bigBlindAmount}.`
     if(bigBlindPlayer.chips < smallBlindPlayer.bet){
         bigBlindPlayer.bet = bigBlindPlayer.chips;
-        bigBlindPlayer.totalBet = bigBlindPlayer.chips;
         bigBlindPlayer.chips = 0;
         bigBlindPlayer.allIn = true;
         pots[0].players = pots[0].players.filter(player => player.member.id !== bigBlindPlayer.member.id);
@@ -123,17 +120,15 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
     } else {
         if(bigBlindPlayer.chips <= bigBlindAmount){
             bigBlindPlayer.bet = bigBlindPlayer.chips;
-            bigBlindPlayer.totalBet = bigBlindPlayer.chips;
             bigBlindPlayer.chips = 0;
             bigBlindPlayer.allIn = true;
-            if(bigBlindPlayer.totalBet === bigBlindAmount){
+            if(bigBlindPlayer.bet === bigBlindAmount){
                 bigBlindMessage = `${bigBlindPlayer.member.toString()} must go all in for ฅ${bigBlindPlayer.bet} to pay the big blind.`;
             } else {
                 bigBlindMessage = `${bigBlindPlayer.member.toString()} can not afford the big blind and must go all in making the effective big blind ฅ${bigBlindPlayer.bet}.`;
             }
         } else {
             bigBlindPlayer.bet = bigBlindAmount;
-            bigBlindPlayer.totalBet = bigBlindAmount;
             bigBlindPlayer.chips -= bigBlindAmount;
         }
 
@@ -141,6 +136,7 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
         pots[0].ante = bigBlindPlayer.bet;
 
         if(smallBlindPlayer.allIn){
+            const bigBlindTotalBet = bigBlindPlayer.bet;
             bigBlindPlayer.bet -= smallBlindPlayer.bet;
             
             pots[0].amount -= smallBlindPlayer.bet * 2;
@@ -154,7 +150,7 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
                 players: [bigBlindPlayer, smallBlindPlayer],
             });
 
-            if(bigBlindPlayer.totalBet < bigBlindAmount){
+            if(bigBlindTotalBet < bigBlindAmount){
                 bigBlindMessage = `${bigBlindPlayer.member.toString()} can not afford the big blind and must go all in and ${smallBlindPlayer.member.toString()} cannot match the bet so side pot 1 was created and the effective big blind is ฅ${pots[0].ante}.`;
             } else {
                 bigBlindMessage += `\n${smallBlindPlayer.member.toString()} cannot match the bet so side pot 1 was created making the effective big blind ฅ${pots[0].ante}.`;
@@ -170,7 +166,7 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
     
     // const communityCards = [
     //     [0, 2],
-    //     [1, 4],
+    //     [1, 2],
     //     [2, 6],
     //     [3, 8],
     //     [0, 10]
@@ -185,16 +181,21 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
     }
 
     // players[0].hand = [
-    //     [0, 3],
-    //     [1, 5]
+    //     [0, 1],
+    //     [1, 11]
     // ];
     // players[1].hand = [
+    //     [2, 3],
+    //     [3, 5]
+    // ];
+    // if(players[2]) players[1].hand = [
     //     [2, 7],
-    //     [3, 9]
+    //     [3, 3]
     // ];
 
     // players[0].chips = 15;
     // players[1].chips = 5;
+    // if(players[2]) players[2].chips = 10;
     
     // skip bets if there is one or less player not all in
     if(players.filter(player => !player.allIn).length <= 1){
@@ -592,24 +593,7 @@ ${player.bestHand.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ${blankE
             if(potWinners.length > 0) break;
         }
 
-        if(potWinners.length === 0) {
-            // If no eligible winners for this pot, distribute it to the overall winners
-            const highestRankGroup = finalResults[0];
-            const winAmount = Math.floor(pot.amount / highestRankGroup.length);
-            const remainder = pot.amount % highestRankGroup.length;
-
-            highestRankGroup.forEach((winner, index) => {
-                const extraChip = index === 0 ? remainder : 0;
-                const totalWin = winAmount + extraChip;
-                
-                if(!winner.won) winner.won = 0;
-                winner.won += totalWin;
-                winner.chips += totalWin;
-            });
-
-            await channel.send(`No eligible winners for pot of ฅ${pot.amount}, distributing to highest ranked player(s).`);
-            continue;
-        }
+        if(potWinners.length === 0) potWinners = pot.players;
 
         // Split pot amount among winners
         const winAmount = Math.floor(pot.amount / potWinners.length);
@@ -657,7 +641,6 @@ async function completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmo
         player.folded = false;
         player.allIn = false;
         player.bet = 0;
-        player.totalBet = 0;
         player.hand = [];
     });
 
@@ -1003,7 +986,17 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                     }
 
                     if (i.customId === 'raise') {
+                        const difference = pots[0].ante - currentPlayer.bet;
+                        if(currentPlayer.chips <= difference) {
+                            await i.reply({
+                                content: `You must go all-in.`,
+                                ephemeral: true
+                            });
+                            return;
+                        }
+
                         await i.deferUpdate();
+                        
                         const raisePrompt = await channel.send(`${currentPlayer.member.toString()}, you have ฅ${currentPlayer.chips}. How much would you like to raise by? Act quick or you will fold <t:${Math.ceil(Date.now()/1000)+60}:R>.`);
                         
                         const filter = m => m.author.id === currentPlayer.member.id && !isNaN(m.content) && parseInt(m.content) > 0;
@@ -1025,14 +1018,13 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                             const difference = pots[0].ante - currentPlayer.bet;
                             currentPlayer.chips -= difference;
                             currentPlayer.bet += difference;
-                            currentPlayer.totalBet += difference;
                             pots[0].amount += difference;
 
                             
                             const shortStackedPlayers = [];
                             for(const player of pots[0].players){
                                 if(player.member.id === currentPlayer.member.id || !player.allIn) continue;
-                                if(player.totalBet < currentPlayer.bet){
+                                if(player.bet < pots[0].ante){
                                     shortStackedPlayers.push(player);
                                 }
                             }
@@ -1100,10 +1092,13 @@ Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                             currentPlayer.bet = 0;
                             currentPlayer.folded = true;
-                            playersStillIn--;
-                            for(const pot of pots){
-                                pot.players = pot.players.filter(player => player.member.id !== currentPlayer.member.id);
+                            for(let i = 1; i < pots.length; i++){
+                                if(pots[i].players.length >= 2){
+                                    pots[i].players = pots[i].players.filter(player => player.member.id !== currentPlayer.member.id);
+                                    if(pots[i].players.length === 1) await channel.send(`${pots[i].players[0].member.toString()} has won side pot ${i}!`);
+                                }
                             }
+                            playersStillIn--;
                         } else if (i.customId === 'call') {
                             const difference = pots[0].ante - currentPlayer.bet;
 
@@ -1116,7 +1111,6 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                             } else {
                                 currentPlayer.chips -= difference;
                                 currentPlayer.bet += difference;
-                                currentPlayer.totalBet += difference;
                                 pots[0].amount += difference;
 
                                 await i.deferUpdate();
@@ -1130,7 +1124,6 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                             await i.deferUpdate();
                             //calculate the bet
                             currentPlayer.bet += currentPlayer.chips;
-                            currentPlayer.totalBet += currentPlayer.chips;
                             if(currentPlayer.bet >= pots[0].ante) { //the player can afford the main pot
                                 const difference = currentPlayer.bet - pots[0].ante;
                                 pots[0].ante += difference;
@@ -1138,7 +1131,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                 const shortStackedPlayers = [];
                                 for(const player of pots[0].players){
                                     if(player.member.id === currentPlayer.member.id || !player.allIn) continue;
-                                    if(player.totalBet < currentPlayer.bet){
+                                    if(player.bet < pots[0].ante){ // Check current bet against ante
                                         shortStackedPlayers.push(player);
                                     }
                                 }
@@ -1263,10 +1256,12 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                 if (reason === 'time' ) {
                     await channel.send(`${currentPlayer.member.toString()} took too long to respond and has folded.`);
                     currentPlayer.bet = 0;
-                    currentPlayer.totalBet = 0;
                     currentPlayer.folded = true;
-                    for(const pot of pots){
-                        pot.players = pot.players.filter(player => player.member.id !== currentPlayer.member.id);
+                    for(let i = 1; i < pots.length; i++){
+                        if(pots[i].players.length >= 2){
+                            pots[i].players = pots[i].players.filter(player => player.member.id !== currentPlayer.member.id);
+                            if(pots[i].players.length === 1) await channel.send(`${pots[i].players[0].member.toString()} has won side pot ${i}!`);
+                        }
                     }
                     playersStillIn--;
                     currentPlayerIndex++;
@@ -1495,7 +1490,8 @@ ${players.map(player => player.member.toString() + '(refunded)').join('\n')}`,
                 }
 
                 // Remove game from database
-                await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+                await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id])
+                    .catch(console.error);
             });
 
         } catch(err) {
