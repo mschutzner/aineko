@@ -1101,6 +1101,9 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                             currentPlayer.bet = 0;
                             currentPlayer.folded = true;
                             playersStillIn--;
+                            for(const pot of pots){
+                                pot.players = pot.players.filter(player => player.member.id !== currentPlayer.member.id);
+                            }
                         } else if (i.customId === 'call') {
                             const difference = pots[0].ante - currentPlayer.bet;
 
@@ -1262,6 +1265,9 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                     currentPlayer.bet = 0;
                     currentPlayer.totalBet = 0;
                     currentPlayer.folded = true;
+                    for(const pot of pots){
+                        pot.players = pot.players.filter(player => player.member.id !== currentPlayer.member.id);
+                    }
                     playersStillIn--;
                     currentPlayerIndex++;
                 }
