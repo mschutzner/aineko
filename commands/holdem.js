@@ -942,7 +942,6 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
 
     const processPlayerAction = async () => {
         const currentPlayer = players[currentPlayerIndex];
-        //get current ante
         const startingBet = currentPlayer.bet;
 
         if(playersStillIn === 1) {
@@ -1063,7 +1062,7 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                                         if(player.bet >= startingBet && !player.allIn){
                                             pots[0].amount -= currentPlayer.bet;
                                             player.bet -= startingBet;
-                                            sidePotAmount += startingBet;
+                                            sidePotAmount += currentPlayer.bet;
                                             sidePotPlayers.push(player);
                                         }
                                     }//make the side pot
@@ -1176,7 +1175,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                             if(player.bet >= startingBet && !player.allIn){
                                                 pots[0].amount -= currentPlayer.bet;
                                                 player.bet -= startingBet;
-                                                sidePotAmount += startingBet;
+                                                sidePotAmount += currentPlayer.bet;
                                                 sidePotPlayers.push(player);
                                             }
                                         }//make the side pot
