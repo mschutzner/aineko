@@ -163,14 +163,6 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
     const deck = shuffleDeck();
 
     const communityCards = deck.splice(0, 5);
-    
-    // const communityCards = [
-    //     [0, 2],
-    //     [1, 2],
-    //     [2, 6],
-    //     [3, 8],
-    //     [0, 10]
-    // ];
 
     for (const player of players) {
         //deal 2 cards to each player
@@ -180,6 +172,14 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
         player.hand.sort((a, b) => (b[1] === 1 ? 14 : b[1]) - (a[1] === 1 ? 14 : a[1]));
     }
 
+    
+    // const communityCards = [
+    //     [0, 2],
+    //     [1, 2],
+    //     [2, 6],
+    //     [3, 8],
+    //     [0, 10]
+    // ];
     // players[0].hand = [
     //     [0, 1],
     //     [1, 11]
@@ -192,10 +192,10 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
     //     [2, 7],
     //     [3, 3]
     // ];
+    players[0].chips = 16;
+    players[1].chips = 7 - players[1].bet;
+    if(players[2]) players[2].chips = 7 - players[2].bet;
 
-    // players[0].chips = 15;
-    // players[1].chips = 5;
-    // if(players[2]) players[2].chips = 10;
     
     // skip bets if there is one or less player not all in
     if(players.filter(player => !player.allIn).length <= 1){
@@ -942,6 +942,8 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
 
     const processPlayerAction = async () => {
         const currentPlayer = players[currentPlayerIndex];
+        //get current ante
+        const startingBet = currentPlayer.bet;
 
         if(playersStillIn === 1) {
             return [players, pots, true];
@@ -1014,6 +1016,7 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                                 await i.followUp("You don't have enough chips for that raise amount.");
                                 return;
                             }
+
                             pots[0].ante += raiseAmount;
                             const difference = pots[0].ante - currentPlayer.bet;
                             currentPlayer.chips -= difference;
@@ -1029,50 +1032,54 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                                 }
                             }
                             if(shortStackedPlayers.length > 0){ //make side pots for short stacked players
-                                let sidePotMessage = `${currentPlayer.member.toString()} raised to ฅ${currentPlayer.bet}.\n`;
+                                let sidePotMessage = `${currentPlayer.member.toString()} raised to ฅ${currentPlayer.bet} and has ฅ${currentPlayer.chips} left.\n`;
                                 for(const shortStackedPlayer of shortStackedPlayers){
-                                    //check if matches existing side pot
-                                    let sidePotMatch = false;
-                                    for(let i = 1; i < pots.length; i++){
-                                        if(pots[i].ante === shortStackedPlayer.bet) {
-                                            sidePotMatch = i;
-                                            break;
+                                    // //check if matches existing side pot
+                                    // let sidePotMatch = false;
+                                    // for(let i = 1; i < pots.length; i++){
+                                    //     if(pots[i].amount/pots[i].length === shortStackedPlayer.bet) {
+                                    //         sidePotMatch = i;
+                                    //         break;
+                                    //     }
+                                    // }
+                                    // if(sidePotMatch){ //add to existing side pot
+                                    //     pots[0].amount -= pots[sidePotMatch].ante;
+                                    //     pots[sidePotMatch].amount += shortStackedPlayer.bet;
+                                    //     pots[sidePotMatch].players.push(shortStackedPlayer); 
+                                    //     pots[0].players = pots[0].players.filter(player => player.member.id !== shortStackedPlayer.member.id); //remove the short stacked player from the main pot
+                                    //     sidePotMessage += `${shortStackedPlayer.member.toString()} is all-in and cannot match the bet so was added to side pot ${sidePotMatch}\n`;
+                                    // } else { 
+                                    // }
+
+                                    // reduce the pot and ante for the main pot
+                                    pots[0].ante -= currentPlayer.bet; 
+                                    pots[0].amount -= startingBet;
+
+                                    //  create side pot
+                                    let sidePotAmount = startingBet;
+                                    let sidePotPlayers = [shortStackedPlayer];
+                                    for(const player of pots[0].players){ //remove all bet from the main pot for all players in the main pot
+                                        if(player.member.id === shortStackedPlayer.member.id) continue;  
+                                        if(player.bet >= startingBet && !player.allIn){
+                                            pots[0].amount -= currentPlayer.bet;
+                                            player.bet -= startingBet;
+                                            sidePotAmount += startingBet;
+                                            sidePotPlayers.push(player);
                                         }
-                                    }
-                                    if(sidePotMatch){ //add to existing side pot
-                                        pots[0].amount -= pots[sidePotMatch].ante;
-                                        pots[sidePotMatch].amount += shortStackedPlayer.bet;
-                                        pots[sidePotMatch].players.push(shortStackedPlayer); 
-                                        pots[0].players = pots[0].players.filter(player => player.member.id !== shortStackedPlayer.member.id); //remove the short stacked player from the main pot
-                                        sidePotMessage += `${shortStackedPlayer.member.toString()} is all-in and cannot match the bet so was added to side pot ${sidePotMatch}\n`;
-                                    } else { //create a new side pot
-                                        pots[0].ante -= shortStackedPlayer.bet; //reduce the ante for the main pot
-                                        let sidePotAmount = shortStackedPlayer.bet;
-                                        let sidePotPlayers = [shortStackedPlayer];
-                                        for(const player of pots[0].players){ //remove all bet from the main pot for all players in the main pot
-                                            if(player.member.id === shortStackedPlayer.member.id) continue;  
-                                            if(player.bet >= shortStackedPlayer.bet && !player.allIn){
-                                                pots[0].amount -= shortStackedPlayer.bet;
-                                                player.bet -= shortStackedPlayer.bet;
-                                                sidePotAmount += shortStackedPlayer.bet;
-                                                sidePotPlayers.push(player);
-                                            }
-                                        }//make the side pot
-                                        pots.push({
-                                            amount: sidePotAmount,
-                                            ante: shortStackedPlayer.bet,
-                                            players: [...sidePotPlayers],
-                                        });
-                                        pots[0].players = pots[0].players.filter(player => player.member.id !== shortStackedPlayer.member.id); //remove the short stacked player from the main pot
-                                        sidePotMessage += `${shortStackedPlayer.member.toString()} is all-in and cannot match the bet so side pot ${pots.length-1} was created.\n`;
-                                    }
+                                    }//make the side pot
+                                    pots.push({
+                                        amount: sidePotAmount,
+                                        players: [...sidePotPlayers],
+                                    });
+                                    pots[0].players = pots[0].players.filter(player => player.member.id !== shortStackedPlayer.member.id); //remove the short stacked player from the main pot
+                                    sidePotMessage += `${shortStackedPlayer.member.toString()} is all-in and cannot match the bet so side pot ${pots.length-1} was created.\n`;
                                 }
                                 await channel.send(`${sidePotMessage}**Community Cards**:
 ${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                             } else {
-                                await channel.send(`${currentPlayer.member.toString()} raised to ฅ${currentPlayer.bet}.
+                                await channel.send(`${currentPlayer.member.toString()} raised to ฅ${currentPlayer.bet} and has ฅ${currentPlayer.chips} left..
 **Community Cards**:
 ${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}
@@ -1114,7 +1121,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                 pots[0].amount += difference;
 
                                 await i.deferUpdate();
-                                await channel.send(`${currentPlayer.member.toString()} has called.
+                                await channel.send(`${currentPlayer.member.toString()} has called and has ฅ${currentPlayer.chips} left.
 **Community Cards**:
 ${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}
@@ -1122,6 +1129,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                             }
                         } else if (i.customId === 'allin') {
                             await i.deferUpdate();
+
                             //calculate the bet
                             currentPlayer.bet += currentPlayer.chips;
                             if(currentPlayer.bet >= pots[0].ante) { //the player can afford the main pot
@@ -1138,42 +1146,46 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                 if(shortStackedPlayers.length > 0){ //make side pots for short stacked players
                                     let sidePotMessage = `${currentPlayer.member.toString()} has gone all-in raising their bet to ฅ${currentPlayer.bet}\n`;
                                     for(const shortStackedPlayer of shortStackedPlayers){
-                                        //check if matches existing side pot
-                                        let sidePotMatch = false;
-                                        for(let i = 1; i < pots.length; i++){
-                                            if(pots[i].players.some(p => p.member.id === shortStackedPlayer.member.id)) continue;
-                                            if(pots[i].ante === shortStackedPlayer.bet) {
-                                                sidePotMatch = i;
-                                                break;
+                                        // //check if matches existing side pot
+                                        // let sidePotMatch = false;
+                                        // for(let i = 1; i < pots.length; i++){
+                                        //     if(pots[i].players.some(p => p.member.id === shortStackedPlayer.member.id)) continue;
+                                        //     if(pots[i].amount/pots[i].length === shortStackedPlayer.bet) {
+                                        //         sidePotMatch = i;
+                                        //         break;
+                                        //     }
+                                        // }
+                                        // if(sidePotMatch){ //add to existing side pot
+                                        //     pots[0].amount -= pots[sidePotMatch].ante;
+                                        //     pots[sidePotMatch].amount += shortStackedPlayer.bet;
+                                        //     pots[sidePotMatch].players.push(shortStackedPlayer); 
+                                        //     pots[0].players = pots[0].players.filter(player => player.member.id !== shortStackedPlayer.member.id); //remove the short stacked player from the main pot
+                                        //     sidePotMessage += `${shortStackedPlayer.member.toString()} is all-in and cannot match the bet so was added to side pot ${sidePotMatch}\n`;
+                                        // } else { //create a new side pot
+                                        // }
+
+                                        // reduce the pot and ante for the main pot
+                                        pots[0].ante -= currentPlayer.bet; 
+                                        pots[0].amount -= startingBet;
+
+                                        //  create side pot
+                                        let sidePotAmount = startingBet;
+                                        let sidePotPlayers = [shortStackedPlayer];
+                                        for(const player of pots[0].players){ //remove all bet from the main pot for all players in the main pot
+                                            if(player.member.id === shortStackedPlayer.member.id) continue;  
+                                            if(player.bet >= startingBet && !player.allIn){
+                                                pots[0].amount -= currentPlayer.bet;
+                                                player.bet -= startingBet;
+                                                sidePotAmount += startingBet;
+                                                sidePotPlayers.push(player);
                                             }
-                                        }
-                                        if(sidePotMatch){ //add to existing side pot
-                                            pots[0].amount -= pots[sidePotMatch].ante;
-                                            pots[sidePotMatch].amount += shortStackedPlayer.bet;
-                                            pots[sidePotMatch].players.push(shortStackedPlayer); 
-                                            pots[0].players = pots[0].players.filter(player => player.member.id !== shortStackedPlayer.member.id); //remove the short stacked player from the main pot
-                                            sidePotMessage += `${shortStackedPlayer.member.toString()} is all-in and cannot match the bet so was added to side pot ${sidePotMatch}\n`;
-                                        } else { //create a new side pot
-                                            pots[0].ante -= shortStackedPlayer.bet; //reduce the ante for the main pot
-                                            let sidePotAmount = shortStackedPlayer.bet;
-                                            let sidePotPlayers = [shortStackedPlayer];
-                                            for(const player of pots[0].players){ //remove all bet from the main pot for all players in the main pot
-                                                if(player.member.id === shortStackedPlayer.member.id) continue;  
-                                                if(player.bet >= shortStackedPlayer.bet && !player.allIn){
-                                                    pots[0].amount -= shortStackedPlayer.bet;
-                                                    player.bet -= shortStackedPlayer.bet;
-                                                    sidePotAmount += shortStackedPlayer.bet;
-                                                    sidePotPlayers.push(player);
-                                                }
-                                            }//make the side pot
-                                            pots.push({
-                                                amount: sidePotAmount,
-                                                ante: shortStackedPlayer.bet,
-                                                players: [...sidePotPlayers],
-                                            });
-                                            pots[0].players = pots[0].players.filter(player => player.member.id !== shortStackedPlayer.member.id); //remove the short stacked player from the main pot
-                                            sidePotMessage += `${shortStackedPlayer.member.toString()} is all-in and cannot match the bet so side pot ${pots.length-1} was created.\n`;
-                                        }
+                                        }//make the side pot
+                                        pots.push({
+                                            amount: sidePotAmount,
+                                            players: [...sidePotPlayers],
+                                        });
+                                        pots[0].players = pots[0].players.filter(player => player.member.id !== shortStackedPlayer.member.id); //remove the short stacked player from the main pot
+                                        sidePotMessage += `${shortStackedPlayer.member.toString()} is all-in and cannot match the bet so side pot ${pots.length-1} was created.\n`;
                                     }
                                     await channel.send(`${sidePotMessage}**Community Cards**:
 ${communityCardsString(communityCards, stage, emojis)}
@@ -1187,51 +1199,54 @@ Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                                 }
                             } else { // the player is making a side pot
-                                //check if matches existing side pot
-                                let sidePotMatch = false;
-                                for(let i = 1; i < pots.length; i++){
-                                    if(pots[i].ante === currentPlayer.bet) {
-                                        sidePotMatch = i;
-                                        break;
-                                    }
-                                }
-                                if(sidePotMatch){ //add to existing side pot
-                                    pots[0].amount -= pots[sidePotMatch].ante;
-                                    pots[sidePotMatch].amount += currentPlayer.bet;
-                                    pots[0].players = pots[0].players.filter(player => player.member.id !== currentPlayer.member.id); //remove the player from the main pot
-                                    pots[sidePotMatch].players.push(currentPlayer);
-                                    await channel.send(`${currentPlayer.member.toString()} has gone all-in, joining side pot ${sidePotMatch}!
-**Community Cards**:
-${communityCardsString(communityCards, stage, emojis)}
-Main Pot: ${pots[0].amount}
-${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
-                                } else { //create a new side pot
-                                    pots[0].ante -= currentPlayer.bet; //reduce the ante for the main pot
-                                    let sidePotAmount = currentPlayer.bet;
-                                    let sidePotPlayers = [currentPlayer];
-                                    for(const player of pots[0].players){ //remove bet from the main pot for all players in the main pot
-                                        if(player.member.id === currentPlayer.member.id) continue;  
-                                        if(player.bet >= currentPlayer.bet){
-                                            pots[0].amount -= currentPlayer.bet;
-                                            player.bet -= currentPlayer.bet;
-                                            sidePotAmount += currentPlayer.bet;
-                                            sidePotPlayers.push(player);
-                                        }
-                                    }
-                                    pots[0].players = pots[0].players.filter(player => player.member.id !== currentPlayer.member.id); //remove the player from the main pot
-                                    //make the side pot
-                                    pots.push({
-                                        amount: sidePotAmount,
-                                        ante: currentPlayer.bet,
-                                        players: [...sidePotPlayers],
-                                    });
-                                    await channel.send(`${currentPlayer.member.toString()} has gone all-in, starting side pot ${pots.length-1}!
-**Community Cards**:
-${communityCardsString(communityCards, stage, emojis)}
-Main Pot: ${pots[0].amount}
-${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
-                                }
+//                                 //check if matches existing side pot
+//                                 let sidePotMatch = false;
+//                                 for(let i = 1; i < pots.length; i++){
+//                                     if(pots[i].amount/pots[i].length === currentPlayer.bet) {
+//                                         sidePotMatch = i;
+//                                         break;
+//                                     }
+//                                 }
+//                                 if(sidePotMatch){ //add to existing side pot
+//                                     pots[0].amount -= pots[sidePotMatch].ante;
+//                                     pots[sidePotMatch].amount += currentPlayer.bet;
+//                                     pots[0].players = pots[0].players.filter(player => player.member.id !== currentPlayer.member.id); //remove the player from the main pot
+//                                     pots[sidePotMatch].players.push(currentPlayer);
+//                                     await channel.send(`${currentPlayer.member.toString()} has gone all-in, joining side pot ${sidePotMatch}!
+// **Community Cards**:
+// ${communityCardsString(communityCards, stage, emojis)}
+// Main Pot: ${pots[0].amount}
+// ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+//                                 } else { //create a new side pot
+//                                 }
 
+                                // reduce the pot and ante for the main pot
+                                pots[0].ante -= currentPlayer.bet; 
+                                pots[0].amount -= startingBet;
+
+                                //  create side pot
+                                let sidePotAmount = currentPlayer.bet;
+                                let sidePotPlayers = [currentPlayer];
+                                for(const player of pots[0].players){ //remove bet from the main pot for all players in the main pot
+                                    if(player.member.id === currentPlayer.member.id) continue;  
+                                    if(player.bet >= currentPlayer.bet){
+                                        pots[0].amount -= currentPlayer.bet;
+                                        player.bet -= currentPlayer.bet;
+                                        sidePotAmount += currentPlayer.bet;
+                                        sidePotPlayers.push(player);
+                                    }
+                                }
+                                pots[0].players = pots[0].players.filter(player => player.member.id !== currentPlayer.member.id); //remove the player from the main pot
+                                //make the side pot
+                                pots.push({
+                                    amount: sidePotAmount,
+                                    players: [...sidePotPlayers],
+                                });
+                                await channel.send(`${currentPlayer.member.toString()} has gone all-in, starting side pot ${pots.length-1}!
+**Community Cards**:
+${communityCardsString(communityCards, stage, emojis)}
+Main Pot: ${pots[0].amount}
+${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                             }
                             //make the player all in
                             currentPlayer.chips = 0;
