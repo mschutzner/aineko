@@ -192,9 +192,9 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
     //     [2, 7],
     //     [3, 3]
     // ];
-    players[0].chips = 16;
-    players[1].chips = 7 - players[1].bet;
-    if(players[2]) players[2].chips = 7 - players[2].bet;
+    // players[0].chips = 16;
+    // players[1].chips = 7 - players[1].bet;
+    // if(players[2]) players[2].chips = 7 - players[2].bet;
 
     
     // skip bets if there is one or less player not all in
