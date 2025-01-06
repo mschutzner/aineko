@@ -17,7 +17,6 @@ module.exports = {
 		.setName('scritch')
 		.setDescription('Give Aineko a good scritch and maybe get something in return.'),
 	cooldown: 30000,
-	catId: 1, //aineko
 	async execute(interaction, pool) {
 		const rewardIndex = randInt(rewardsTable.length-1);
 		const reward = rewardsTable[rewardIndex];
@@ -44,7 +43,7 @@ Aineko gives you ฅ${reward.amt}.`);
 				const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
 					[member.id, 6, member.displayName, 'Chubby']);
 				if(userCatDB[0].affectedRows){
-					channel.send({content: `<@${member.id}> just gained ownership of Chubby by giving their 10th /scritch! This unlocks the /munchies command.`, files: ['images/cats/Chubby.jpg']});
+					channel.send({content: `<@${member.id}> just gained ownership of Chubby by giving their 10th /scritch! This unlocks the \`/munchies\` command.`, files: ['images/cats/Chubby.jpg']});
 				}
 			}
 		} finally{

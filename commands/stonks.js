@@ -7,15 +7,33 @@ module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('stonks')
 		.setDescription('Track your stonks over time!')
-		.addNumberOption(option =>
-			option.setName('hours')
-				.setDescription('Sets how many hours ago you want the graph to display.')
-				.setRequired(true)
-		),
+		.addSubcommand(subcommand =>
+			subcommand
+				.setName('hours')
+				.setDescription('View stonks graph using hours ago')
+				.addNumberOption(option =>
+					option.setName('start')
+						.setDescription('How many hours ago to start the graph from')
+						.setRequired(true))
+				.addNumberOption(option =>
+					option.setName('end')
+						.setDescription('How many hours ago to end the graph (defaults to now)')
+						.setRequired(false)))
+		.addSubcommand(subcommand =>
+			subcommand
+				.setName('timestamp')
+				.setDescription('View stonks graph using timestamps')
+				.addNumberOption(option =>
+					option.setName('start')
+						.setDescription('Unix timestamp to start the graph from')
+						.setRequired(true))
+				.addNumberOption(option =>
+					option.setName('end')
+						.setDescription('Unix timestamp to end the graph (defaults to now)')
+						.setRequired(false))),
 	async execute(interaction, pool) {
 		const conn = await pool.getConnection();
-		try{
-
+		try {
 			const member = interaction.member;
 			const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [member.id]);
 			
@@ -26,7 +44,6 @@ module.exports = {
 			ctx.strokeStyle = '#0f0';
 			ctx.lineWidth = 2;
 
-		
 			const scritchGraph = await loadImage("images/scritch-graph.png");
 			ctx.drawImage(scritchGraph, 0, 0);		
 
@@ -36,15 +53,88 @@ module.exports = {
 			ctx.font = '20px Helvetica';
 			ctx.fillText(userDB[0][0].scritch_bucks, 565, 40);
 	
-			const hours =  interaction.options.getNumber('hours')
-			const timeScale = hours*3600000;
 			const curTime = new Date().getTime();
-			const startTime = curTime - timeScale;
+			let startTime, endTime, timeScale, startHours, endHours;
+
+			if (interaction.options.getSubcommand() === 'hours') {
+				startHours = interaction.options.getNumber('start');
+				endHours = interaction.options.getNumber('end') || 0;
+				
+				// Validate hours
+				if (startHours < 0 || endHours < 0) {
+					return await interaction.reply({ 
+						content: 'Hours cannot be negative. Please provide positive values.',
+						ephemeral: true 
+					});
+				}
+				
+				if (endHours >= startHours) {
+					return await interaction.reply({ 
+						content: 'Start time must be earlier than end time. Please provide a larger number for start hours than end hours.',
+						ephemeral: true 
+					});
+				}
+				
+				startTime = curTime - (startHours * 3600000);
+				endTime = curTime - (endHours * 3600000);
+				timeScale = (startHours - endHours) * 3600000;
+			} else {
+				const startTimestamp = interaction.options.getNumber('start');
+				const endTimestamp = interaction.options.getNumber('end');
+				
+				// Validate timestamps
+				if (startTimestamp < 0) {
+					return await interaction.reply({ 
+						content: 'Start timestamp cannot be negative. Please provide a valid Unix timestamp.',
+						ephemeral: true 
+					});
+				}
+				
+				if (endTimestamp && endTimestamp < 0) {
+					return await interaction.reply({ 
+						content: 'End timestamp cannot be negative. Please provide a valid Unix timestamp.',
+						ephemeral: true 
+					});
+				}
+
+				const currentUnixTime = Math.floor(curTime / 1000);
+				if (startTimestamp > currentUnixTime) {
+					return await interaction.reply({ 
+						content: 'Start timestamp cannot be in the future.',
+						ephemeral: true 
+					});
+				}
+				
+				if (endTimestamp && endTimestamp > currentUnixTime) {
+					return await interaction.reply({ 
+						content: 'End timestamp cannot be in the future.',
+						ephemeral: true 
+					});
+				}
+				
+				startTime = startTimestamp * 1000; // Convert to milliseconds
+				endTime = endTimestamp 
+						? endTimestamp * 1000 
+						: curTime;
+				
+				if (startTime >= endTime) {
+					return await interaction.reply({ 
+						content: 'Start time must be earlier than end time. Please provide a smaller timestamp for start than end.',
+						ephemeral: true 
+					});
+				}
+				
+				timeScale = endTime - startTime;
+				// Calculate hours for timestamp subcommand
+				startHours = (curTime - startTime) / 3600000;
+				endHours = (curTime - endTime) / 3600000;
+			}
 
 			ctx.font = '15px Helvetica';
-			for ( let i = 0; i < 7; i++){
-				const time = hours-hours/6*i;
-				ctx.fillText(`t-${time.toFixed(2)}`, 5+i*100, 500);
+			for (let i = 0; i < 7; i++) {
+				const time = startHours - ((startHours - endHours)/6 * i);
+				const timeLabel = `t-${time.toFixed(2)}`;
+				ctx.fillText(timeLabel, 5+i*100, 500);
 			}
 			
 			const userScritchDB = await conn.query('SELECT * FROM `user_scritch` WHERE `user_id` = ?;', [member.id]);
@@ -91,6 +181,8 @@ module.exports = {
 
 				for(let i = 0; i < userScritchDB[0].length; i++){
 					if(userScritchDB[0][i].timestamp.getTime() < startTime) continue;
+					if(userScritchDB[0][i].timestamp.getTime() > endTime) break;  // Stop if we exceed end time
+					
 					let nextTimestamp = userScritchDB[0][i].timestamp.getTime();
 					nextX = x + (nextTimestamp - prevTime) * xUnits;
 					prevTime = nextTimestamp;
@@ -103,14 +195,16 @@ module.exports = {
 					y = nextY;
 				}
 
-				ctx.lineTo(630, y);
+				// Only extend to the end time, not full width
+				let finalX = x + (endTime - prevTime) * xUnits;
+				finalX = Math.min(finalX, 630);  // Cap at 630 to stay within graph
+				ctx.lineTo(finalX, y);
 				ctx.stroke();
 
 				attachment = new AttachmentBuilder(canvas.toBuffer(), { name: "scritch-graph.png"});
 				await interaction.reply({ files: [attachment] });
 			}
-		} finally{
-			//release pool connection
+		} finally {
 			conn.release();
 		}
 	},

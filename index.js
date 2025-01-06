@@ -4,7 +4,8 @@ const { Client, Collection, GatewayIntentBits, InteractionType, ChannelType, Par
 const mysql = require("mysql2/promise");
 const { Campaign } = require('patreon-discord');
 const { stage, lurkerMin, memberMin, regularMin, championMin, decayRate, tickRate, facepalms } = require("./config.json");
-const { sleep, randInt, unixToMysqlDatetime} = require("./utils.js");
+const { sleep, randInt, unixToMysqlDatetime, formatDuration} = require("./utils.js");
+const { OpenAI } = require('openai');
 
 const emojis = [];
 
@@ -106,17 +107,7 @@ client.on("interactionCreate", async interaction => {
 			if(timerDB[0].length > 0){
 				const prevEndTime = timerDB[0][0].end_time.getTime();
 				const timeRemaining = prevEndTime - Date.now();
-				if(timeRemaining > 3600000 ){
-					const hours = Math.round(timeRemaining / 3600000 );
-					return  interaction.reply({content: `You must wait ${hours} more hours before you can use this command again.`, ephemeral: true});
-				}
-				if(timeRemaining > 60000){
-					const minutes = Math.round(timeRemaining / 60000);
-					return  interaction.reply({content: `You must wait ${minutes} more minutes before you can use this command again.`, ephemeral: true});
-				} else if(timeRemaining > 0) {
-					const seconds = Math.round(timeRemaining / 1000);
-					return interaction.reply({content: `You must wait ${seconds} more seconds before you can use this command again.`, ephemeral: true});
-				}
+				return interaction.reply({content: `You must wait ${formatDuration(timeRemaining)} before you can use this command again.`, ephemeral: true});
 			}
 
 			const endTime = unixToMysqlDatetime(Date.now() + command.cooldown);
@@ -128,6 +119,9 @@ client.on("interactionCreate", async interaction => {
 					[user.id, guild.id, command.data.name]);
 			}, command.cooldown);
 		} 
+
+		//update member active status
+		await conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
 
 		await command.execute(interaction, pool, emojis);
 		
@@ -160,8 +154,7 @@ client.on('messageCreate', async message => {
 	const conn = await pool.getConnection();
 	try{		
 		//activity tracking
-		if(message.type != 'APPLICATION_COMMAND') 
-			await conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
+		await conn.query('UPDATE `member` SET `active` = 1 WHERE `guild_id` = ? AND `user_id` = ?;', [guild.id, member.id]);
 
 		const guildDB = await conn.query('SELECT `count_channel` FROM `guild` WHERE `guild_id` = ?;', [guild.id]);
 		//counting game
@@ -568,7 +561,7 @@ const guildCreate = async (guild) => {
 			const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
 				[member.id, 1, member.displayName, 'Aineko']);
 			if(userCatDB[0].affectedRows){
-				member.send({content: 'You just gained ownership of Aineko having Aineko added to a server you are in. Aineko is your first cat but you can collect many more by interacting with the bot. Owning Aineko unlocks the /scritch command which you can use to earn "scritch bucks", an in bot currency represented by ฅ.', files: ['images/cats/Aineko.jpg']});
+				member.send({content: 'You just gained ownership of Aineko by joining your first server with Aineko in it. Aineko is your first cat but you can collect many more by interacting with the bot. Owning Aineko unlocks the /scritch command which you can use to earn "scritch bucks", an in bot currency represented by ฅ.', files: ['images/cats/Aineko.jpg']});
 			}
 		}
 	} finally{
@@ -682,17 +675,86 @@ async function activityLoop(){
 	setTimeout(activityLoop, tickRate);
 }
 
-async function questionLoop(){
+async function generateUniqueQuestion(existingQuestions) {
+	try {
+		const response = await openai.chat.completions.create({
+			model: "gpt-3.5-turbo",
+			messages: [
+				{
+					role: "system",
+					content: "You are a helpful assistant that generates engaging discussion questions for an online community. Generate a unique, thought-provoking question that encourages discussion and interaction between community members. Make sure all questions are family friendly."
+				},
+				{
+					role: "user",
+					content: `Generate a unique discussion question that is not similar to any of these existing questions: ${existingQuestions.join(", ")}`
+				}
+			],
+			temperature: 0.8,
+			max_tokens: 100
+		});
+
+		return response.choices[0].message.content.replace(/['"]/g, '');
+	} catch (error) {
+		console.error('Error generating question:', error);
+		return null;
+	}
+}
+
+async function generateAndStoreQuestion() {
+	const conn = await pool.getConnection();
+	try {
+		// Get all existing questions
+		const questionsDB = await conn.query('SELECT question FROM question;');
+		const existingQuestions = questionsDB[0].map(q => q.question);
+
+		// Generate new unique question
+		const newQuestion = await generateUniqueQuestion(existingQuestions);
+		
+		if (newQuestion) {
+			// Store the new question in the database
+			await conn.query('INSERT INTO question (question) VALUES (?);', [newQuestion]);
+			console.log('New question generated and stored:', newQuestion);
+		}
+	} catch (error) {
+		console.error('Error in generateAndStoreQuestion:', error);
+	} finally {
+		conn.release();
+	}
+}
+
+async function questionLoop() {
+	// Calculate time until next question time (14:00)
 	let questionTime = new Date();
 	if (questionTime.getHours() >= 14) questionTime.setDate(questionTime.getDate() + 1);
 	questionTime.setHours(14, 0, 0, 0);
 	questionTime = questionTime.getTime();
+
+	// Calculate time until midnight for question generation
+	let midnightTime = new Date();
+	if (midnightTime.getHours() >= 7) midnightTime.setDate(midnightTime.getDate() + 1);
+	midnightTime.setHours(7, 0, 0, 0);
+	midnightTime = midnightTime.getTime();
 	
 	const curTime = new Date().getTime();
 
+	// Only schedule question generation if in production
+	if (stage === 'production') {
+		// Schedule question generation for midnight
+		setTimeout(async () => {
+			await generateAndStoreQuestion();
+			// Schedule next generation for tomorrow midnight
+			setTimeout(async () => {
+				generateAndStoreQuestion();
+				// Continue scheduling daily
+				setInterval(generateAndStoreQuestion, 24 * 60 * 60 * 1000);
+			}, 24 * 60 * 60 * 1000 - (Date.now() % (24 * 60 * 60 * 1000)));
+		}, midnightTime - curTime);
+	}
+
+	// Rest of the existing questionLoop function...
 	setTimeout(async () => {
 		const conn = await pool.getConnection();
-		try{
+		try {
 			const guildsDB = await conn.query('SELECT * FROM `guild` WHERE `active` = 1 AND `question_channel` IS NOT NULL;');
 			for await(const guildDB of guildsDB[0]){
 				if(!guildDB.question_channel) continue;
@@ -708,10 +770,8 @@ async function questionLoop(){
 					await conn.query('INSERT INTO `guild_question` (`guild_id`, `question_id`) VALUES (?, ?);', [guildDB.guild_id, questionDB[0][questionId]._id]);
 				}
 			}
-		} finally{
-			//release pool connection
+		} finally {
 			conn.release();
-			
 			questionLoop();
 		}
 	}, questionTime - curTime);
@@ -920,7 +980,8 @@ client.once("ready", async () => {
 	console.log(startMsg);
 });
 
-
-
+const openai = new OpenAI({
+	apiKey: process.env.OPENAI_API_KEY
+});
 
 client.login(process.env.TOKEN);

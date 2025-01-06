@@ -3,9 +3,9 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('referral')
-		.setDescription('Mention the user who referred you to the server.')
+		.setDescription('Mention the user who referred you to the server to get ฅ1000!')
         .addUserOption(option => option.setName('user')
-            .setDescription('The user to be painted.')
+            .setDescription('The user who refered you.')
 			.setRequired(true)),
 	async execute(interaction, pool) {
 		const member = interaction.member;

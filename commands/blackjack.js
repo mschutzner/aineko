@@ -1,7 +1,103 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { AttachmentBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { sleep, shuffle } = require("../utils.js");
-const { createCanvas, loadImage, Image } = require('canvas');
+
+function getEmoji(emojis, name){
+    try{
+        return emojis.find(e => e.name === name).toString();
+    } catch(e){
+        console.error(`Emoji ${name} not found`);
+        return name;
+    }
+}
+
+function getValueEmoji(suit, value, emojis) {
+    const prefix = suit === 0 || suit === 1 ? 'red_' : 'black_';
+    const valueString = ['ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'jack', 'queen', 'king'][value - 1];
+    return getEmoji(emojis, prefix + valueString);
+}
+
+function getSuitEmoji(suit, emojis){
+    return getEmoji(emojis, ['hearts_suit', 'diamonds_suit', 'clubs_suit', 'spades_suit'][suit]);
+}
+
+function createBlackjackButtons(canDoubleDown, canSurrender) {
+    const hit = new ButtonBuilder()
+        .setCustomId('hit')
+        .setLabel('Hit')
+        .setStyle(ButtonStyle.Primary);
+
+    const stand = new ButtonBuilder()
+        .setCustomId('stand')
+        .setLabel('Stand')
+        .setStyle(ButtonStyle.Primary);
+
+    const doubleDown = new ButtonBuilder()
+        .setCustomId('double_down')
+        .setLabel('Double Down')
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(!canDoubleDown);
+
+    const surrender = new ButtonBuilder()
+        .setCustomId('surrender')
+        .setLabel('Surrender')
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(!canSurrender);
+
+    const row = new ActionRowBuilder().addComponents(hit, stand);
+    if (canDoubleDown || canSurrender) {
+        row.addComponents(doubleDown, surrender);
+    }
+
+    return [row];
+}
+
+function createLobbyButtons() {
+    const join = new ButtonBuilder()
+        .setCustomId('join')
+        .setLabel('Join Game')
+        .setStyle(ButtonStyle.Success);
+
+    const start = new ButtonBuilder()
+        .setCustomId('start')
+        .setLabel('Start Game')
+        .setStyle(ButtonStyle.Primary);
+
+    const cancel = new ButtonBuilder()
+        .setCustomId('cancel')
+        .setLabel('Cancel Game')
+        .setStyle(ButtonStyle.Danger);
+
+    return new ActionRowBuilder().addComponents(join, start, cancel);
+}
+
+function isSoftHand(hand) {
+    let total = 0;
+    let hasAce = false;
+    
+    for(const card of hand) {
+        if(card[1] === 1) {
+            hasAce = true;
+            total += 11;
+        } else if(card[1] > 10) {
+            total += 10;
+        } else {
+            total += card[1];
+        }
+    }
+    
+    // If we have an ace and the total is over 21, we're not soft
+    if(hasAce && total > 21) {
+        return false;
+    }
+    
+    return hasAce && total <= 21;
+}
+
+function formatCards(hand, emojis) {
+    return `${hand.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${hand.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`;
+}
 
 function addCards(hand){
     let total = 0;
@@ -35,248 +131,149 @@ function addCards(hand){
     return total;
 }
 
-async function turn(deck, channel, ctx, canvas, cardSheet, player, conn){
-    if(player.hand.length == 2){
-        const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [player.id]);
-        if(userDB[0][0].scritch_bucks >= player.wager){
-            const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-            await channel.send({ content: `It is <@${player.id}>'s turn. They have 30 seconds to reply with hit, stand, double down, or surrender.`, files: [attachment] });
-            
-            const filter = msg => msg.author.id == player.id && msg.content.match(/^(hit|stand|surrender|double down)/i);
-            const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
-            
-            if(collected.first() && collected.first().content.toLowerCase() !== 'stand'){
-                if (collected.first().content.toLowerCase() == 'surrender') {
-                    player.surrendered = true;
-                    const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                    await channel.send({ content: `${player.displayName} has surrendered.`, files: [attachment2] });
-                    await sleep(2000);
-                    const obj = { deck, player};
-                    return obj;
-                } else if (collected.first().content.toLowerCase() == 'double down'){
-                    player.wager *= 2;
-    
-                    await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [player.wager, player.id]);
-    
-                    player.hand.push(deck.splice(0, 1)[0]);
-                    // player.hand.push([0,1]);
-                    
-                    if(player.value == 20){
-                        //add Murphy to user;
-                        const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
-                            [player.id, 4, player.displayName, 'Murphy']);
-                        if(userCatDB[0].affectedRows){
-                            await channel.send({content: `<@${player.id}> just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.`, files: ['images/cats/Murphy.jpg']});
-                        }
-                    }
-
-                    player.hand.reverse();
-                    for (const index in player.hand){
-                        ctx.drawImage(cardSheet, (player.hand[index][1]-1)*64, player.hand[index][0]*100, 64, 100, player.x+92+20*(player.hand.length-index-1), 415-50*(player.hand.length-index-1), 64, 100);
-                    }
-                    player.hand.reverse();
-            
-                    player.value = addCards(player.hand);
-                    if(player.value == 21){
-                        const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                        await channel.send({ content: `${player.displayName} has doubled down and got blackjack!`, files: [attachment2] });
-                        await sleep(3000);
-                        const obj = { deck, player};
-                        return obj;
-                    } else if(player.value > 21){
-                        player.busted = true;
-                        const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                        await channel.send({ content: `${player.displayName} has doubled down and busted.`, files: [attachment2] });
-                        await sleep(3000);
-                        const obj = { deck, player};
-                        return obj;
-                    } else {
-                        const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                        await channel.send({ content: `${player.displayName} has doubled down.`, files: [attachment2] });
-                        await sleep(3000);
-                        const obj = { deck, player};
-                        return obj;
-                    }
-                } else {
-                    player.hand.push(deck.splice(0, 1)[0]);
-                    // player.hand.push([0,1]);
-                    
-                    if(player.value == 20){
-                        //add Murphy to user;
-                        const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
-                            [player.id, 4, player.displayName, 'Murphy']);
-                        if(userCatDB[0].affectedRows){
-                            channel.send({content: `<@${player.id}> just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.`, files: ['images/cats/Murphy.jpg']});
-                        }
-                    }
-        
-                    player.hand.reverse();
-                    for (const index in player.hand){
-                        ctx.drawImage(cardSheet, (player.hand[index][1]-1)*64, player.hand[index][0]*100, 64, 100, player.x+92+20*(player.hand.length-index-1), 415-50*(player.hand.length-index-1), 64, 100);
-                    }
-                    player.hand.reverse();
-    
-                    player.value = addCards(player.hand);
-                    if(player.value == 21){
-                        const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                        await channel.send({ content: `${player.displayName} got blackjack!`, files: [attachment2] });
-                        await sleep(3000);
-                        const obj = { deck, player};
-                        return obj;
-                    } else if(player.value > 21){
-                        player.busted = true;
-                        const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                        await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
-                        await sleep(3000);
-                        const obj = { deck, player};
-                        return obj;
-                    } else {
-                        const obj = await turn(deck, channel, ctx, canvas, cardSheet, player, conn);
-                        return obj;
-                    }
-                }
-            } else {
-                await channel.send(`${player.displayName} stood.`);
-                const obj = { deck, player};
-                return obj;
-            }
-        } else {
-            const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-            await channel.send({ content: `It is <@${player.id}>'s turn. They have 30 seconds to reply with hit, stand, or surrender.`, files: [attachment] });
-            
-            const filter = msg => msg.author.id == player.id && msg.content.match(/^(hit|stand|surrender)/i);
-            const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
-            if(collected.first() && collected.first().content.toLowerCase() !== 'stand'){
-                if (collected.first().content.toLowerCase() == 'surrender') {
-                    player.surrendered = true;
-                    const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                    await channel.send({ content: `${player.displayName} has surrendered.`, files: [attachment2] });
-                    await sleep(2000);
-                    const obj = { deck, player};
-                    return obj;
-                } else {
-                    player.hand.push(deck.splice(0, 1)[0]);
-                    // player.hand.push([0,1]);
-                    
-                    if(player.value == 20){
-                        //add Murphy to user;
-                        const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
-                            [player.id, 4, player.displayName, 'Murphy']);
-                        if(userCatDB[0].affectedRows){
-                            channel.send({content: `<@${player.id}> just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.`, files: ['images/cats/Murphy.jpg']});
-                        }
-                    }
-       
-                    player.hand.reverse();
-                    for (const index in player.hand){
-                        ctx.drawImage(cardSheet, (player.hand[index][1]-1)*64, player.hand[index][0]*100, 64, 100, player.x+92+20*(player.hand.length-index-1), 415-50*(player.hand.length-index-1), 64, 100);
-                    }
-                    player.hand.reverse();
-
-                    player.value = addCards(player.hand);
-                    if(player.value == 21){
-                        const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                        await channel.send({ content: `${player.displayName} got blackjack!`, files: [attachment2] });
-                        await sleep(3000);
-                        const obj = { deck, player};
-                        return obj;
-                    } else if(player.value > 21){
-                        player.busted = true;
-                        const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                        await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
-                        await sleep(3000);
-                        const obj = { deck, player};
-                        return obj;
-                    } else {
-                        const obj = await turn(deck, channel, ctx, canvas, cardSheet, player, conn);
-                        return obj;
-                    }
-                }
-            } else {
-                await channel.send(`${player.displayName} stood.`);
-                const obj = { deck, player};
-                return obj;
-            }
-        }
-    } else {
-        const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-        await channel.send({ content: `It is <@${player.id}>'s turn. They have 30 seconds to reply with hit or stand.`, files: [attachment] });
-        
-        const filter = msg => msg.author.id == player.id && msg.content.match(/^(hit|stand)/i);
-    
-        const collected = await channel.awaitMessages({ filter, max: 1, time: 30000 });
-        if(collected.first() && collected.first().content.toLowerCase() == 'hit'){
-            player.hand.push(deck.splice(0, 1)[0]);
-            // player.hand.push([0,1]);
-                    
-                    if(player.value == 20){
-                        //add Murphy to user;
-                        const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
-                            [player.id, 4, player.displayName, 'Murphy']);
-                        if(userCatDB[0].affectedRows){
-                            channel.send({content: `<@${player.id}> just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the /beg command.`, files: ['images/cats/Murphy.jpg']});
-                        }
-                    }
-    
-            player.hand.reverse();
-            for (const index in player.hand){
-                ctx.drawImage(cardSheet, (player.hand[index][1]-1)*64, player.hand[index][0]*100, 64, 100, player.x+92+20*(player.hand.length-index-1), 415-50*(player.hand.length-index-1), 64, 100);
-            }
-            player.hand.reverse();
-
-            player.value = addCards(player.hand);
-            if(player.value == 21){
-                const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                await channel.send({ content: `${player.displayName} got blackjack!`, files: [attachment2] });
-                await sleep(3000);
-                const obj = { deck, player};
-                return obj;
-            } else if(player.value > 21){
-                player.busted = true;
-                const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                await channel.send({ content: `${player.displayName} busted.`, files: [attachment2] });
-                await sleep(3000);
-                const obj = { deck, player};
-                return obj;
-            } else {
-                const obj = await turn(deck, channel, ctx, canvas, cardSheet, player, conn);
-                return obj;
-            }
-        } else {
-            await channel.send(`${player.displayName} stood.`);
-            const obj = { deck, player};
-            return obj;
-        }
+function formatDealerHand(hand, hideSecond, emojis) {
+    if (hideSecond) {
+        const blankCard = getEmoji(emojis, 'blank_card');
+        const blankSuit = getEmoji(emojis, 'blank_suit');
+        return `${getValueEmoji(hand[0][0], hand[0][1], emojis)} ${blankCard}
+${getSuitEmoji(hand[0][0], emojis)} ${blankSuit}`;
     }
-
+    return formatCards(hand, emojis);
 }
 
-async function dealerTurn(deck, channel, ctx, cardSheet, tableImg, dealerAvatar, dealerHand){
-    ctx.drawImage(tableImg, 0, 0, 720, 140, 0, 0, 720, 140);
+async function turn(deck, channel, player, conn, emojis, dealerHand) {
+    if(player.hand.length == 2){
+        const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [player.id]);
+        const canDoubleDown = userDB[0][0].scritch_bucks >= player.wager;
+        const turnTime = Date.now();
+        
+        let message = await channel.send({ 
+            content: `It is ${player.toString()}'s turn.
+This turn expires <t:${Math.ceil(turnTime/1000)+32}:R>
+Dealer's Hand:
+${formatDealerHand(dealerHand, true, emojis)}
+${player.toString()}'s Hand (${player.value}):
+${formatCards(player.hand, emojis)}`,
+            components: createBlackjackButtons(canDoubleDown, true)
+        });
 
-    dealerHand.push(deck.splice(0, 1)[0]);
-    // dealerHand.push([0,1]);
+        try {
+            while(player.value < 21) {
+                const collector = message.createMessageComponentCollector({ 
+                    time: 30000,
+                    max: 1
+                });
 
-    const x = (720/2)-(85+69*dealerHand.length)/2
-    
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(x+40, 55, 40, 0, Math.PI * 2, true);
-    ctx.closePath();
-    ctx.clip();
-    ctx.drawImage(dealerAvatar, x, 15, 80, 80);
-    ctx.restore();
+                const result = await new Promise((resolve) => {
+                    collector.on('collect', async i => {
+                        if (i.user.id !== player.id) {
+                            await i.reply({ content: "It's not your turn!", ephemeral: true });
+                            return;
+                        }
 
-    for(const index in dealerHand){
-        ctx.drawImage(cardSheet, (dealerHand[index][1]-1)*64, dealerHand[index][0]*100, 64, 100, x+85+69*index, 10, 64, 100);
+                        await i.deferUpdate();
+                        await message.edit({ components: [] });
+
+                        if (i.customId === 'surrender') {
+                            player.surrendered = true;
+                            await channel.send(`${player.toString()} has surrendered.`);
+                            resolve('end');
+                        } else if (i.customId === 'double_down') {
+                            player.wager *= 2;
+                            await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
+                                [player.wager, player.id]);
+
+                            player.hand.push(deck.splice(0, 1)[0]);
+                            player.value = addCards(player.hand);
+                            
+                            if(player.value == 20){
+                                const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+                                    [player.id, 4, player.displayName, 'Murphy']);
+                                if(userCatDB[0].affectedRows){
+                                    await channel.send({content: `<@${player.id}> just gained ownership of Murphy by doubling down on 20 in blackjack! This unlocks the \`/beg\` command.`, files: ['images/cats/Murphy.jpg']});
+                                }
+                            }
+
+                            await channel.send(`${player.toString()}'s Hand (${player.value}):
+${formatCards(player.hand, emojis)}`);
+
+                            if(player.value == 21){
+                                await channel.send(`## ${player.toString()} has doubled down and got blackjack!
+${player.toString()}'s Hand (${player.value}):
+${formatCards(player.hand, emojis)}`);
+                            } else if(player.value > 21){
+                                player.busted = true;
+                                await channel.send(`##${player.toString()} has doubled down and busted.
+${player.toString()}'s Hand (${player.value}):
+${formatCards(player.hand, emojis)}`);
+                            } else {
+                                await channel.send(`${player.toString()} has doubled down.
+${player.toString()}'s Hand (${player.value}):
+${formatCards(player.hand, emojis)}`);
+                            }
+                            resolve('end');
+                        } else if (i.customId === 'hit') {
+                            player.hand.push(deck.splice(0, 1)[0]);
+                            player.value = addCards(player.hand);
+                            
+                            if(player.value == 20){
+                                const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+                                    [player.id, 4, player.displayName, 'Murphy']);
+                                if(userCatDB[0].affectedRows){
+                                    await channel.send({content: `<@${player.id}> just gained ownership of Murphy by hitting on 20 in blackjack! This unlocks the \`/beg\` command.`, files: ['images/cats/Murphy.jpg']});
+                                }
+                            }
+
+                            message = await channel.send({ 
+                                content: `${player.toString()} hit.
+${player.toString()}'s Hand (${player.value}):
+${formatCards(player.hand, emojis)}`,
+                                components: createBlackjackButtons(false, false)
+                            });
+
+                            if(player.value == 21){
+                                await message.edit({ components: [] });
+                                await channel.send(`## ${player.toString()} got blackjack!`);
+                                resolve('end');
+                            } else if(player.value > 21){
+                                await message.edit({ components: [] });
+                                player.busted = true;
+                                await channel.send(`## ${player.toString()} busted.`);
+                                resolve('end');
+                            } else {
+                                resolve('continue');
+                            }
+                        } else if (i.customId === 'stand') {
+                            await channel.send(`${player.toString()} stood.`);
+                            resolve('end');
+                        }
+                    });
+
+                    collector.on('end', (collected, reason) => {
+                        if (reason === 'time') {
+                            message.edit({ components: [] });
+                            channel.send(`${player.toString()} took too long and stood.`);
+                            resolve('end');
+                        }
+                    });
+                });
+
+                if (result === 'end') break;
+            }
+
+            return { deck, player };
+        } catch(err) {
+            console.error('Error handling button interaction:', err);
+            throw err;
+        }
     }
+}
 
-    const dealerValue = addCards(dealerHand);
-    if(dealerValue < 17){
-        deck = await dealerTurn(deck, channel, ctx, cardSheet, tableImg, dealerAvatar, dealerHand);
+async function dealerTurn(deck, dealerHand, channel, emojis) {
+    while (addCards(dealerHand) < 17) {
+        dealerHand.push(deck.splice(0, 1)[0]);
     }
-    
-    return deck;
+    return dealerHand;
 }
 
 
@@ -288,307 +285,378 @@ module.exports = {
 			option.setName('wager')
 				.setDescription("The amount of scritch bucks you'd like to wager.")
 				.setRequired(true)),
-    game: true,
-	async execute(interaction, pool) {
-        const channel = interaction.channel;
+	game: true,
+	help: `A casino card game where players compete against the dealer to get closest to 21 without going over.
 
-        const wager = interaction.options.getInteger('wager');
-        
-        if(wager <= 0 ) return interaction.reply({ 
+**Rules:**
+- Each player places a wager before receiving cards
+- Players are dealt 2 cards face up, dealer gets one face up and one face down
+- Card values: Ace = 1 or 11, Face cards = 10, Number cards = face value
+- Blackjack (21) pays 3:2
+- Otherwise, beating the dealer pays 1:1
+
+**Player Actions:**
+- Hit - Take another card
+- Stand - Keep current hand
+- Double Down - Double wager and take exactly one more card (only on first turn)
+- Surrender - Give up half the wager and fold (only on first turn)
+- Insurance - Bet half your wager against dealer blackjack (only when dealer shows Ace) pays 2:1
+
+**Additional Rules:**
+- Dealer must hit on 16 or less and stand on 17
+- If dealer and players have the same hand, the player pushes and gets their wager back`,
+	async execute(interaction, pool, emojis) {
+		const channel = interaction.channel;
+		const wager = interaction.options.getInteger('wager');
+		const startTime = Date.now();
+		
+		if(wager <= 0) return interaction.reply({ 
 			content: "Wager must be positive.",
 			ephemeral: true 
 		});
 
-        const players = [interaction.member]
-        players[0].wager = wager;
+		const players = [interaction.member];
+		players[0].wager = wager;
 
-        const conn = await pool.getConnection();
-		try{
-            //check if player has enough scritch bucks and return if not.
-            const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [interaction.member.id]);
-            if(userDB[0].length === 0) throw("That user does not exist in the database.");
-            if(wager > userDB[0][0].scritch_bucks) return interaction.reply({content: "You don't have enough scritch bucks.", ephemeral: true});
+		const conn = await pool.getConnection();
+		try {
+			const userDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [interaction.member.id]);
+			if(userDB[0].length === 0) throw("That user does not exist in the database.");
+			if(wager > userDB[0][0].scritch_bucks) return interaction.reply({content: "You don't have enough scritch bucks.", ephemeral: true});
 
-            await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, "blackjack");', [channel.id]);
+			await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, "blackjack");', [channel.id]);
 
-            await interaction.reply(`${interaction.member.displayName} has started a game of blackjack with a wager of ฅ${wager}! Reply with join followed by the amount of scritch bucks you'd like to wager. The game starts in one minute or when a player replies with "start". ${interaction.member.displayName} can cancel the game by responding with "cancel".`);
+			const message = await interaction.reply({ 
+				content: `${interaction.member.toString()} has started a game of blackjack with a wager of ฅ${wager}!
+The game will start <t:${Math.ceil(startTime/1000)+62}:R> or when the host starts it.
+## Players:
+${interaction.member.toString()} - ฅ${wager}`,
+				components: [createLobbyButtons()],
+				fetchReply: true
+			});
     
-            let deck = [];
-            for(let i = 0; i < 6; i++){
-                for(let j = 0; j < 4; j++){
-                    for(let k = 1; k <= 13; k++){
-                        deck.push([j,k]);
-                    }
-                }
-            }
-            deck = shuffle(deck);
+			let deck = [];
+			for(let i = 0; i < 6; i++){
+				for(let j = 0; j < 4; j++){
+					for(let k = 1; k <= 13; k++){
+						deck.push([j,k]);
+					}
+				}
+			}
+			deck = shuffle(deck);
     
-            const joinFilter = msg => msg.content.match(/^join ฅ?[1-9]+[0-9]*/i) && !players.some(player => player.id == msg.member.id);
-            const joinCollector = channel.createMessageCollector({ filter: joinFilter, time: 60000});
-    
-            joinCollector.on('collect', async msg => {
-                const regex = msg.content.match(/^join ฅ?([1-9]+[0-9]*)/i);
-                const wager = parseInt(regex[1]);
-                const userDB2 = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [msg.member.id]);
-                if(userDB2[0].length === 0) return channel.send("That user does not exist in the database.");
-                if(wager > userDB2[0][0].scritch_bucks) return channel.send("You don't have enough scritch bucks.");
-                players.push(msg.member);
-                players[players.length-1].wager = wager;
-                if(players.length >= 3) joinCollector.stop();
-                channel.send(`${msg.member.displayName} has joined the game with a wager of ฅ${wager}!`);
-            });
-    
-            const startFilter = msg => msg.content.toLowerCase() == "start" && players.some(player => player.id == msg.member.id);
-            const startCollector = channel.createMessageCollector({ filter: startFilter, time: 60000, max: 1 });
-    
-            startCollector.on('collect', async msg => {
-                joinCollector.stop();
-            });
-    
-            let gameCanceled = false;
-            const cancelFilter = msg => msg.content.toLowerCase() == "cancel" && msg.member.id == players[0].id;
-            const cancelCollector = channel.createMessageCollector({ filter: cancelFilter, time: 60000, max: 1 });
-    
-            cancelCollector.on('collect', async msg => {
+			const collector = message.createMessageComponentCollector({
+				componentType: ComponentType.Button,
+				time: 60000
+			});
 
-                joinCollector.stop('canceled');
-                startCollector.stop();
-                
-			    await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+			collector.on('collect', async i => {
+				try {
+					if (i.customId === 'join') {
+						// Check if player is already in game
+						if (players.some(p => p.id === i.user.id)) {
+							await i.reply({ content: "You're already in the game.", ephemeral: true });
+							return;
+						}
 
-                await channel.send(`Game of blackjack canceled!`);
-            });
+						// Create modal for wager input
+						const modal = new ModalBuilder()
+							.setCustomId('wager_modal')
+							.setTitle('Place your wager');
 
-    
-            joinCollector.on('end', async (collected, reason) => {
-                if(reason && reason === 'canceled') return;
-                await sleep(500);
+						const wagerInput = new TextInputBuilder()
+							.setCustomId('wager_input')
+							.setLabel('How much would you like to wager?')
+							.setStyle(TextInputStyle.Short)
+							.setPlaceholder('Enter amount')
+							.setRequired(true);
 
-                //clear out previous games and remove wagers from DB
-                for await (const player of players){
-                    player.busted = false;
-                    player.surrendered = false;
-                    player.insurance = false;
-                    await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [player.wager, player.id]);
-                }
+						const actionRow = new ActionRowBuilder().addComponents(wagerInput);
+						modal.addComponents(actionRow);
 
-                let dealerHand = [];
-                for await (const player of players){
-                    player.hand = [];
-                    player.hand.push(deck.splice(0, 1)[0]);
-                    // player.hand.push([0,10]);
-                }
-                dealerHand.push(deck.splice(0, 1)[0]);
-                // dealerHand.push([0,1]);
-                for await (const player of players){
-                    player.hand.push(deck.splice(0, 1)[0]);
-                    // player.hand.push([0,10]);
-                    player.value = addCards(player.hand);
-                }
-                dealerHand.push(deck.splice(0, 1)[0]);
-                // dealerHand.push([0,1]);
-                const canvas = createCanvas(720, 540);
-                const ctx = canvas.getContext('2d');
-                ctx.save();
+						await i.showModal(modal);
 
-                const tableImg = await loadImage("images/blackjack/table.png");
-                const cardSheet = await loadImage("images/blackjack/card-sheet.png");
-                const cardBack = await loadImage("images/blackjack/card-back.png");
-                const arrow = await loadImage("images/blackjack/arrow.png");
+						try {
+							const modalSubmit = await i.awaitModalSubmit({ time: 30000 });
+							const joinWager = parseInt(modalSubmit.fields.getTextInputValue('wager_input'));
 
-                ctx.drawImage(tableImg, 0, 0);
+							if (isNaN(joinWager) || joinWager <= 0) {
+								await modalSubmit.reply({ content: "Please enter a valid positive number.", ephemeral: true });
+								return;
+							}
 
-                ctx.beginPath();
-                ctx.arc(284, 55, 40, 0, Math.PI * 2, true);
-                ctx.closePath();
-                ctx.clip();
+							const joinUserDB = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [i.user.id]);
+							if(joinUserDB[0].length === 0) {
+								await modalSubmit.reply({ content: "You don't exist in the database.", ephemeral: true });
+								return;
+							}
+							if(joinWager > joinUserDB[0][0].scritch_bucks) {
+								await modalSubmit.reply({ content: "You don't have enough scritch bucks.", ephemeral: true });
+								return;
+							}
 
-                const dealerAvatar = await loadImage(interaction.client.user.displayAvatarURL().replace('webp', 'png'));
-                ctx.drawImage(dealerAvatar, 244, 15, 80, 80);
-                
-                ctx.restore();
-                ctx.drawImage(cardSheet, (dealerHand[0][1]-1)*64, dealerHand[0][0]*100, 64, 100, 329, 10, 64, 100);
-                ctx.drawImage(cardBack, 398, 10);
+							players.push(i.member);
+							players[players.length-1].wager = joinWager;
 
-                players.reverse();
-                for(let i = 0; i < players.length; i++){
-                    players[i].x = (i+1)*720/(players.length+1)-120;
-                }
-                players.reverse();
+							await modalSubmit.reply(`${i.user.toString()} has joined the game with a wager of ฅ${joinWager}!`);
+							await message.edit({
+								content: `${interaction.member.toString()} has started a game of blackjack!
+The game will start <t:${Math.ceil(startTime/1000)+62}:R> or when the host starts it.
+## Players:
+${players.map(p => `**${p.toString()}** - ฅ${p.wager}`).join('\n')}`,
+								components: [createLobbyButtons()]
+							});
+						} catch (err) {
+							console.error('Modal error:', err);
+						}
 
-                for await (const player of players){
-                    ctx.save();
+					} else if (i.customId === 'start' || i.customId === 'cancel') {
+						if (i.user.id !== interaction.member.id) {
+							await i.reply({ content: "Only the game host can do that!", ephemeral: true });
+							return;
+						}
 
-                    ctx.beginPath();
-                    ctx.arc(player.x+45, 475, 40, 0, Math.PI * 2, true);
-                    ctx.closePath();
-                    ctx.clip();
+						if (i.customId === 'start') {
+							await i.deferUpdate();
+							collector.stop('started');
+						} else {
+							await i.deferUpdate();
+							collector.stop('cancelled');
+						}
+					}
+				} catch (error) {
+					console.error('Button interaction error:', error);
+					await i.reply({ content: "An error occurred while processing your action.", ephemeral: true }).catch(console.error);
+				}
+			});
 
-                    const avatar = await loadImage(player.displayAvatarURL().replace('webp', 'png'));
-                    ctx.drawImage(avatar, player.x+5, 435, 80, 80);
+			collector.on('end', async (collected, reason) => {
+				try {
+					if (reason === 'cancelled') {
+						// Refund all players
+						for await (const player of players) {
+							const refundUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', 
+								[player.id]);
+							const newAmount = refundUserDB[0][0].scritch_bucks + player.wager;
+							const highestScritchBucks = (newAmount > refundUserDB[0][0].scritch_bucks_highscore) ? 
+								newAmount : refundUserDB[0][0].scritch_bucks_highscore;
+							
+							await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+								[newAmount, highestScritchBucks, player.id]);
+							await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
+								[player.id, newAmount, player.user.username]);
+						}
 
+						await message.edit({
+							content: `Game cancelled by host. All players have been refunded.
+${players.map(p => `${p.toString()} - ฅ${p.wager} (refunded)`).join('\n')}`,
+							components: []
+						});
+						await channel.send('Game cancelled by host. All players have been refunded.');
+						await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+						return;
+					}
 
-                    ctx.restore();
+					// Continue with game...
+					await message.edit({
+						content: `${interaction.member.toString()} has started a game of blackjack!
+## Players:
+${players.map(p => `${p.toString()} - ฅ${p.wager}`).join('\n')}`,
+						components: []
+					});
 
-                    ctx.drawImage(cardSheet, (player.hand[1][1]-1)*64, player.hand[1][0]*100, 64, 100, player.x+92+20, 415-50, 64, 100);
-                    ctx.drawImage(cardSheet, (player.hand[0][1]-1)*64, player.hand[0][0]*100, 64, 100, player.x+92, 415, 64, 100);
-                }
-                
-                for await(const player of players){
-                    ctx.drawImage(arrow, player.x+25, 385);
+					// Clear out previous games and remove wagers from DB
+					for await (const player of players) {
+						player.busted = false;
+						player.surrendered = false;
+						player.insurance = false;
+						await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
+							[player.wager, player.id]);
+					}
 
-                    if(dealerHand[0][1] == 1){
-                        const userDB3 = await conn.query('SELECT `scritch_bucks` FROM `user` WHERE `user_id` = ?;', [player.id]);
-                        if(userDB3[0][0].scritch_bucks < Math.ceil(player.wager/2)){
-                            await channel.send(`${player.displayName} doesn't have enough scritch bucks for insurance.`);
-                        } else {
-                            const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                            await channel.send({ content: `<@${player.id}>, do you want insurance? Reply with yes or no.`, files: [attachment] });
-    
-                            const filter = msg => msg.author.id == player.id && msg.content.match(/^(yes|no)/i);
-    
-                            const collected = await channel.awaitMessages({ filter, max: 1, time: 20000 });
+					// Deal initial cards
+					let dealerHand = [];
+					for await (const player of players) {
+						player.hand = [];
+						player.hand.push(deck.splice(0, 1)[0]);
+					}
+					dealerHand.push(deck.splice(0, 1)[0]);
 
-                            if(collected.first() && collected.first().content.toLowerCase() == 'yes'){
-                                player.insurance = Math.ceil(player.wager/2);
-                                await channel.send(`${player.displayName} has opted for insurance and put forward ${player.insurance}.`);
-                                await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', [player.insurance, player.id]);
-                            }
-                        }
-                    }
+					for await (const player of players) {
+						player.hand.push(deck.splice(0, 1)[0]);
+						player.value = addCards(player.hand);
+					}
+					dealerHand.push(deck.splice(0, 1)[0]);
 
-                    if(player.value == 21){
-                        const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                        await channel.send({ content: `${player.displayName} got blackjack!`, files: [attachment] });
-                        await sleep(3000);
-                    } else {
-                        const obj = await turn(deck, channel, ctx, canvas, cardSheet, player, conn);
-                        Object.assign(deck, obj.deck);
-                        Object.assign(player, obj.player);
-                        player.value = addCards(player.hand);
-                    }
-                    ctx.drawImage(tableImg, player.x+25, 385, 40, 40, player.x+25, 385, 40, 40);
-                }
+					// Show initial game state
+					await channel.send(`## Game Started!
+## Dealer's Hand:
+${formatDealerHand(dealerHand, true, emojis)}
+## Player Hands`);
 
-                let dealerValue = addCards(dealerHand);
-                ctx.drawImage(cardSheet, (dealerHand[1][1]-1)*64, dealerHand[1][0]*100, 64, 100, 398, 10, 64, 100);
-                
-                if(dealerHand[0][1] == 1){
-                    let msg = '';
-                    if(dealerValue == 21){
-                        for await (const player of players){
-                            if(player.insurance){
-                                msg += `${player.displayName} won ${2*player.insurance} in insurance.\n`;
-                                await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', [2*player.insurance, player.id]);
-                            }
-                        }
-                    } else {
-                        for await (const player of players){
-                            if(player.insurance){
-                                msg += `${player.displayName} lost ${player.insurance} in insurance.`;
-                            }
-                        }
-                    }
-                    if(msg){
-                        const attachment2 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                        await channel.send({ content: msg, files: [attachment2] });
-                        await sleep(4000);
-                    }
-                }
+					// Handle insurance and player turns
+					for await (const player of players) {
+						await channel.send(`${player.toString()}'s Hand (${player.value}):
+${formatCards(player.hand, emojis)}`);
 
-                if(dealerValue < 17){
-                    deck = await dealerTurn(deck, channel, ctx, cardSheet, tableImg, dealerAvatar, dealerHand);
-                } 
-                dealerValue = addCards(dealerHand);
+						if (dealerHand[0][1] === 1) {
+							const insuranceTime = Date.now();
+							const insuranceMsg = await channel.send({ 
+								content: `${player.toString()}, would you like insurance for ฅ${Math.ceil(player.wager/2)}?
+This option expires <t:${Math.ceil(insuranceTime/1000)+22}:R>`,
+								components: [new ActionRowBuilder()
+									.addComponents(
+										new ButtonBuilder()
+											.setCustomId('yes')
+											.setLabel('Yes')
+											.setStyle(ButtonStyle.Success),
+										new ButtonBuilder()
+											.setCustomId('no')
+											.setLabel('No')
+											.setStyle(ButtonStyle.Danger)
+									)]
+							});
 
-                let msg2;
-                if(dealerValue > 21){
-                    msg2 = `The dealer busted!\n`;
-                    for await (const player of players){
-                        const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [player.id]);
-                        if(player.busted){
-                            msg2 += `${player.displayName} lost ฅ${player.wager}.\n`;
-                            
-                            conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-                                [player.id, userDB[0][0].scritch_bucks, player.user.username]);
+							try {
+								const insuranceCollector = insuranceMsg.createMessageComponentCollector({ 
+									time: 20000,
+									max: 1
+								});
 
-                        } else if(player.surrendered){
-                            const loss = Math.ceil(player.wager/2);
-                            msg2 += `${player.displayName} lost ฅ${loss}.\n`;
-                            
-                            const newScritchBucks = userDB[0][0].scritch_bucks + player.wager-loss;
-                            await conn.query('UPDATE `user` SET `scritch_bucks` = ? WHERE `user_id` = ?;', 
-                                [newScritchBucks, player.id]);
-                            conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-                                [player.id, newScritchBucks, player.user.username]);
-                        } else {
-                            const win = (player.value == 21) ? Math.ceil(player.wager*1.5) : player.wager;
-                            msg2 += `${player.displayName} won ฅ${win}.\n`;
+								const insuranceResponse = await new Promise(resolve => {
+									insuranceCollector.on('collect', async i => {
+										if (i.user.id !== player.id) {
+											await i.reply({ content: "This insurance option isn't for you!", ephemeral: true });
+											return;
+										}
 
-                            const newScritchBucks = userDB[0][0].scritch_bucks + player.wager + win;
-                            const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
-                            await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-                                [newScritchBucks, highestScritchBucks, player.id]);
-                            conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-                                [player.id, newScritchBucks, player.user.username]);
-                        }
-                    }
-                } else {
-                    msg2 = `Dealer got ${dealerValue}.\n`;
-                    for await (const player of players){
-                        const userDB3 = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [player.id]);
+										await i.deferUpdate();
+										resolve(i.customId === 'yes');
+									});
 
-                        if(player.busted){
-                            msg2 += `${player.displayName} lost ฅ${player.wager}.\n`;
-                        
-                            conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-                                [player.id, userDB3[0][0].scritch_bucks, player.user.username]);
+									insuranceCollector.on('end', collected => {
+										if (collected.size === 0) resolve(false);
+									});
+								});
 
-                        } else if(player.surrendered){
-                            const loss = Math.ceil(player.wager/2);
-                            msg2 += `${player.displayName} lost ฅ${loss}.\n`;
+								await insuranceMsg.delete();
 
-                            const newScritchBucks = userDB3[0][0].scritch_bucks + player.wager-loss;
-                            await conn.query('UPDATE `user` SET `scritch_bucks` = ? WHERE `user_id` = ?;', 
-                                [newScritchBucks, player.id]);
-                            conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-                                [player.id, newScritchBucks, player.user.username]);
+								if (insuranceResponse) {
+									player.insurance = Math.ceil(player.wager/2);
+									await channel.send(`${player.toString()} has opted for insurance and put forward ฅ${player.insurance}.`);
+									await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
+										[player.insurance, player.id]);
+								}
+							} catch (err) {
+								console.error('Insurance error:', err);
+							}
+						}
 
-                        } else {
-                            if(player.value > dealerValue){
-                                const win = (player.value == 21) ? Math.ceil(player.wager*1.5) : player.wager;
-                                msg2 += `${player.displayName} won ฅ${win}.\n`;
-                                
-                                const newScritchBucks = userDB3[0][0].scritch_bucks + player.wager + win;
-                                const highestScritchBucks = (newScritchBucks > userDB3[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB3[0][0].scritch_bucks_highscore;
-                                await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-                                    [newScritchBucks, highestScritchBucks, player.id]);
-                                conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-                                    [player.id, newScritchBucks, player.user.username]);
+						if (player.value === 21) {
+							await channel.send(`${player.toString()} got blackjack!`);
+						} else {
+							const obj = await turn(deck, channel, player, conn, emojis, dealerHand);
+							Object.assign(deck, obj.deck);
+							Object.assign(player, obj.player);
+							player.value = addCards(player.hand);
+						}
+					}
 
-                            } else if(player.value == dealerValue){
-                                msg2 += `${player.displayName} pushed.\n`;
+					//reveale dealer hand
+					let dealerValue = addCards(dealerHand);
+					if(dealerValue < 17) {
+						dealerHand = await dealerTurn(deck, dealerHand, channel, emojis);
+					}
+					dealerValue = addCards(dealerHand);
+					await channel.send(`## Dealer's Final Hand (${dealerValue}${dealerValue > 21 ? ' busted' : ''}):
+${formatCards(dealerHand, emojis)}`);
 
-                                await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', [player.wager, player.id]);
+                    await channel.send('## Final Player Hands');
 
-                            } else {
-                                msg2 += `${player.displayName} lost ฅ${player.wager}.\n`;
+					for (const player of players) {
+						await channel.send(`${player.toString()}'s Hand (${player.value}):
+${formatCards(player.hand, emojis)}`);
+					}
 
-                                await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-                                    [player.id, userDB3[0][0].scritch_bucks, player.user.username]);
-                            }
-                        }
-                    }
-                }
-                const attachment3 = new AttachmentBuilder(canvas.toBuffer(), { name: 'blackjack-table.png' });
-                await channel.send({ content: msg2, files: [attachment3] });
+					// Show individual results
+					for await (const player of players){
+						let resultMsg = '';
+						const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [player.id]);
+						
+						if(player.busted){
+							resultMsg = `## ${player.toString()} lost ฅ${player.wager}.`;
+							conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+								[player.id, userDB[0][0].scritch_bucks, player.user.username]);
+						} else if(player.surrendered){
+							const loss = Math.ceil(player.wager/2);
+							resultMsg = `## ${player.toString()} lost ฅ${loss}.`;
+							
+							const newScritchBucks = userDB[0][0].scritch_bucks + player.wager-loss;
+							await conn.query('UPDATE `user` SET `scritch_bucks` = ? WHERE `user_id` = ?;', 
+								[newScritchBucks, player.id]);
+							conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+								[player.id, newScritchBucks, player.user.username]);
+						} else if(addCards(dealerHand) > 21 || player.value > addCards(dealerHand)){
+							const win = (player.value == 21) ? Math.ceil(player.wager*1.5) : player.wager;
+							resultMsg = `## ${player.toString()} won ฅ${win}.`;
+							
+							const newScritchBucks = userDB[0][0].scritch_bucks + player.wager + win;
+							const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
+							await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+								[newScritchBucks, highestScritchBucks, player.id]);
+							conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+								[player.id, newScritchBucks, player.user.username]);
+						} else if(player.value == addCards(dealerHand)){
+							resultMsg = `${player.toString()} pushed.`;
+							await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', 
+								[player.wager, player.id]);
+						} else {
+							resultMsg = `## ${player.toString()} lost ฅ${player.wager}.`;
+							await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+								[player.id, userDB[0][0].scritch_bucks, player.user.username]);
+						}
+						
+						await channel.send(resultMsg);
+					}
 
-                await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
-            });
+					await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+				} catch (err) {
+					console.error('Game error:', err);
+					// Try to refund players if there's an error
+					try {
+						for await (const player of players) {
+							const refundUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', 
+								[player.id]);
+							const newAmount = refundUserDB[0][0].scritch_bucks + player.wager;
+							const highestScritchBucks = (newAmount > refundUserDB[0][0].scritch_bucks_highscore) ? 
+								newAmount : refundUserDB[0][0].scritch_bucks_highscore;
+							
+							await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+								[newAmount, highestScritchBucks, player.id]);
+							await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
+								[player.id, newAmount, player.user.username]);
+						}
+						
+						await message.edit({
+							content: `Game cancelled due to an error. All wagers have been refunded.
+${players.map(p => `${p.toString()} - ฅ${p.wager} (refunded)`).join('\n')}`,
+							components: []
+						});
+					} catch (refundErr) {
+						console.error('Error while refunding:', refundErr);
+						await message.edit({
+							content: 'An error occurred. Please contact an administrator to check if refunds are needed.',
+							components: []
+						});
+					}
+					await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+					throw err;
+				}
+			});
 		} catch(err){              
-           await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
-           throw err;
-        } finally{
+			await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
+			throw err;
+		} finally{
 			conn.release();
 		}
 	},

@@ -5,6 +5,7 @@ module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('shop')
 		.setDescription('Buy cats.'),
+	help: 'React with the number emojis to purchase cats for scritch bucks (ฅ). Some cats unlock special commands when purchased.',
 	async execute(interaction, pool) {
 		const conn = await pool.getConnection();
 		try{
@@ -52,7 +53,7 @@ module.exports = {
 
 				if(cat.command){
 
-					channel.send({content: `<@${user.id}> has bought ${cat.name} for ฅ${cat.price}. This unlocks the /${cat.command} command.`, files: [`images/cats/${cat.name}.jpg`]});
+					channel.send({content: `<@${user.id}> has bought ${cat.name} for ฅ${cat.price}. This unlocks the \`/${cat.command}\` command.`, files: [`images/cats/${cat.name}.jpg`]});
 				} else {
 					channel.send({content: `<@${user.id}> has bought ${cat.name} for ฅ${cat.price}.`, files: [`images/cats/${cat.name}.jpg`]});
 				}

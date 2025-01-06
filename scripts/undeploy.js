@@ -25,6 +25,7 @@ client.once("ready", async () => {
         if(!command) throw('Command not found.');
         command.delete();
     }
+    console.log('done');
 });
 
 client.login(process.env.TOKEN);

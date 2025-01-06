@@ -132,5 +132,20 @@ module.exports = {
     },
     unixToMysqlDatetime(unixTime){
         return new Date(unixTime).toISOString().slice(0, 19).replace('T', ' ');
+    },
+    formatDuration(ms) {
+        if (ms < 1000) return `${ms}ms`;
+        
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+
+        if (hours > 0) {
+            return `${hours} hour${hours !== 1 ? 's' : ''}`;
+        } else if (minutes > 0) {
+            return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        } else {
+            return `${seconds} second${seconds !== 1 ? 's' : ''}`;
+        }
     }
 }

@@ -5,7 +5,7 @@ module.exports = {
 		.setName('give')
 		.setDescription('Give scritch bucks to another user.')
         .addUserOption(option => option.setName('user')
-            .setDescription('The user to be painted.')
+            .setDescription('The user to give scritch bucks to.')
 			.setRequired(true))
 		.addIntegerOption(option =>
 			option.setName('amount')

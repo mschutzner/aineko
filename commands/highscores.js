@@ -5,6 +5,7 @@ module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('highscores')
 		.setDescription('See the members with the top 5 highest activity points on the server.'),
+	help: 'Displays the top 5 members with the highest activity points on the server. Activity points are earned by sending messages or using commands. Activity points are distributed for one point for every five minute interval that a user is active. Users start with 4 activity points and activity points decay over time. The more you have the quicker they decay.',
 	async execute(interaction, pool) {
 		const conn = await pool.getConnection();
 		try{

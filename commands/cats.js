@@ -1,15 +1,22 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { AttachmentBuilder } = require('discord.js');
+const { AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createCanvas, loadImage, Image } = require('canvas');
 const { getEmojiByNumber, getNumberByEmoji } = require("../utils.js");
 
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('cats')
-		.setDescription('Show off your cats collection!')
+		.setDescription('Show off a user\'s cats collection!')
         .addUserOption(option => option.setName('user')
             .setDescription('The user to view the cats of.')
 		),
+	help: `Displays information about available commands.
+		
+Usage:
+\`/cats\` - Lists all of your cats.
+\`/cats <user>\` - Shows a user's cats.
+
+The command list is paginated if there are more than six cats. Use the Previous/Next buttons to navigate through pages.`,
 	async execute(interaction, pool) {
 		const conn = await pool.getConnection();
 		try{
@@ -106,6 +113,7 @@ module.exports = {
 
 				default:
 					const pages = Math.ceil(userCatDB[0].length/6);
+					page = 0;
 
 					canvas = createCanvas(540, 360);
 					ctx = canvas.getContext('2d');
@@ -121,22 +129,46 @@ module.exports = {
 
 						ctx.fillText(cat.cat_name, 26+(i%3)*180, 26+180*Math.floor(i/3));
 					}
+
+					const row = new ActionRowBuilder()
+						.addComponents(
+							new ButtonBuilder()
+								.setCustomId('previous')
+								.setLabel('Previous')
+								.setStyle(ButtonStyle.Primary)
+								.setDisabled(true),
+							new ButtonBuilder()
+								.setCustomId('next')
+								.setLabel('Next')
+								.setStyle(ButtonStyle.Primary)
+								.setDisabled(pages <= 1)
+						);
 	
 					attachment = new AttachmentBuilder(canvas.toBuffer(), { name: `${target.displayName}'s-cats.png`});
-					msg = await interaction.reply({ content: `${target.displayName}'s cats page 0:`,
+					msg = await interaction.reply({ 
+						content: `${target.displayName}'s cats (Page ${page + 1}/${pages}):`,
 						files: [attachment],
+						components: [row],
 						fetchReply: true 
 					});
-;					
-					const filter = (reaction, user) => (!user.bot);
-					const collector = msg.createReactionCollector({filter});
 					
-					collector.on('collect', async (reaction, user) => {
-						reaction.users.remove(user.id);
+					const collector = msg.createMessageComponentCollector();
+					
+					collector.on('collect', async i => {
+						if(i.user.id !== interaction.user.id){
+							i.reply({ content: 'You are not the owner of this command.', ephemeral: true });
+							return;
+						}
+						
+						if (i.customId === 'previous') {
+							page--;
+						} else if (i.customId === 'next') {
+							page++;
+						}
 
-						if(user.id != interaction.user.id) return;
-
-						page = getNumberByEmoji(reaction.emoji.name);
+						// Update button states
+						row.components[0].setDisabled(page === 0);
+						row.components[1].setDisabled(page === pages - 1);
 						
 						ctx.clearRect(0, 0, canvas.width, canvas.height);
 						
@@ -152,22 +184,14 @@ module.exports = {
 						}
 						
 						attachment = new AttachmentBuilder(canvas.toBuffer(), { name: `${target.displayName}'s-cats.png`});
-						msg.edit({ content: `${target.displayName}'s cats page ${page}:`, files: [attachment] });
+						await i.update({ 
+							content: `${target.displayName}'s cats (Page ${page + 1}/${pages}):`, 
+							files: [attachment],
+							components: [row]
+						});
 					});
-
-					for (let i = 0; i < pages; i++){
-						msg.react(getEmojiByNumber(i));
-					}
 				break;
 			}
-
-			// const filter = (reaction, user) => (!user.bot && user.id == target.id);
-			// const collector = shop.createReactionCollector({filter});
-			
-			// collector.on('collect', async (reaction, user) => {
-			// });
-
-			// shop.react(getNumberReaction(i));
 		} finally{
 			//release pool connection
 			conn.release();

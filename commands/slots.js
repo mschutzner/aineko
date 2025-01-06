@@ -21,20 +21,11 @@ const emojiTable = {
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('slots')
-		.setDescription('Bet ฅ1 to pull the lever on the slot machine.')
-		.addSubcommand(subcommand =>
-			subcommand
-				.setName('play')
-				.setDescription('Pull the lever.'))
-		.addSubcommand(subcommand =>
-			subcommand
-				.setName('rules')
-				.setDescription('Display the rules of the rewards.')),
-	cooldown: 4000,
+		.setDescription('Bet ฅ1 to pull the lever on the slot machine.'),
 	catId: 8, //aineko
-	async execute(interaction, pool) {
-		if(interaction.options.getSubcommand() === "rules"){
-			return interaction.reply(`Results must be from left to right.
+	help: `Bet ฅ1 to pull the lever on the slot machine.
+	
+Results must be from left to right.
 Stars are wild.
 ⭐⭐⭐⭐ 200
 ⭐⭐⭐ 100
@@ -51,8 +42,8 @@ Stars are wild.
 🍋🍋🍋🍋 20
 🍋🍋🍋 10
 🍒🍒 5
-🍒 1`)
-		}
+🍒 1`,
+	async execute(interaction, pool) {
 		const result1 = strip1[randInt(0,strip1.length-1)];
 		const result2 = strip2[randInt(0,strip2.length-1)];
 		const result3 = strip3[randInt(0,strip3.length-1)];
@@ -68,8 +59,6 @@ Stars are wild.
             if(userDB[0][0].scritch_bucks <= 0) return interaction.reply({content: "You don't have enough scritch bucks.", ephemeral: true});
 
 			await interaction.reply(`<@${member.id}> put a scritch buck in the slot machine and pulled the lever!`);
-
-			await sleep(2000);
 
 			let reward = -1;
 			let jackpot = false;
@@ -189,7 +178,7 @@ Stars are wild.
 					[member.id, 7, member.displayName, 'Lucky']
 				);
 				if(userCatDB[0].affectedRows){
-					channel.send({content: `<@${member.id}> just gained ownership of Lucky by getting a jackpot!`, files: ['images/cats/Lucky.jpg']});
+					channel.send({content: `<@${member.id}> just gained ownership of Lucky by getting a jackpot! This unlocks the \`/lovebomb\` command.`, files: ['images/cats/Lucky.jpg']});
 				}
 			} else if(jackpot2){
 				await channel.send(`<@${member.id}> hit the second jackpot and won ฅ100!`);
@@ -198,7 +187,7 @@ Stars are wild.
 					[member.id, 7, member.displayName, 'Lucky']
 				);
 				if(userCatDB[0].affectedRows){
-					channel.send({content: `<@${member.id}> just gained ownership of Lucky by getting a jackpot!`, files: ['images/cats/Lucky.jpg']});
+					channel.send({content: `<@${member.id}> just gained ownership of Lucky by getting a jackpot! This unlocks the \`/lovebomb\` command.`, files: ['images/cats/Lucky.jpg']});
 				}
 			} else if(reward > 0){
 				await channel.send(`<@${member.id}> won ฅ${reward + 1}!`);
