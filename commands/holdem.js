@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { sleep, shuffle } = require("../utils.js");
 require('dotenv').config();
 
@@ -232,7 +232,8 @@ Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
 
     for (const player of players) await player.member.send(`**Your hand:**
-${player.hand.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')} ${player.hand.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`);
+${player.hand.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${player.hand.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`);
 
     if (players.length > 2) {
         const firstPlayer = players.shift();
@@ -564,13 +565,13 @@ async function determineWinner(communityCards, players, pots, host, buyIn, small
 
     // Construct the message to show hands
     await channel.send("## Player Hands:");
-    finalResults.forEach(async result => {
-        result.forEach(async player => {
+    for (const result of finalResults) {
+        for (const player of result) {
             await channel.send(`${player.member.toString()} - ${player.handName}
 ${player.bestHand.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')} ${blankEmoji} ${player.hand.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
 ${player.bestHand.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ${blankEmoji} ${player.hand.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`);
-        });
-    });
+        }
+    }
 
     //reverse back to descending order
     finalResults.reverse();
@@ -618,10 +619,10 @@ ${player.bestHand.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ${blankE
         }
     }
     winners.sort((a, b) => a.won - b.won);
-    winners.forEach(winner => {
+    for(const winner of winners){
         winningMessage += `# ${winner.member.toString()} won ฅ${winner.won} with ${winner.handName}!\n`;
         players.find(p => p.member.id === winner.member.id).chips = winner.chips;
-    });
+    }
     await channel.send(winningMessage);
 
     completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
@@ -963,13 +964,13 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
             components: actionRow
         });
 
-        let raiseCollector;
-
         return new Promise((resolve) => {
             const collector = message.createMessageComponentCollector({
                 componentType: ComponentType.Button,
                 time: 60000
             });
+
+            let raiseIndex = 0;
 
             collector.on('collect', async i => {
                 try {
@@ -988,28 +989,55 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                             return;
                         }
 
-                        await i.deferUpdate();
-                        
-                        const raisePrompt = await channel.send(`${currentPlayer.member.toString()}, you have ฅ${currentPlayer.chips}. How much would you like to raise by? Act quick or you will fold <t:${Math.ceil(Date.now()/1000)+60}:R>.`);
-                        
-                        const filter = m => !isNaN(m.content) && parseInt(m.content) > 0 && (m.author.id === currentPlayer.member.id || channel.guild.id === '825883828798881822');
-                        raiseCollector = channel.createMessageCollector({
-                            filter,
-                            time: 60000, // 30 seconds for the collector
-                        });
+                        // Create the modal
+                        const modal = new ModalBuilder()
+                            .setCustomId(`raiseModal-${raiseIndex}`)
+                            .setTitle('Raise Amount');
 
-                        // Reset button collector timeout to allow time for message response
+                        // Create the text input component
+                        const raiseInput = new TextInputBuilder()
+                            .setCustomId('raiseAmount')
+                            .setLabel(`How much to raise? (Max: ${currentPlayer.chips})`)
+                            .setStyle(TextInputStyle.Short)
+                            .setPlaceholder('Enter amount')
+                            .setRequired(true)
+                            .setMinLength(1)
+                            .setMaxLength(10);
+
+                        // Add the text input to the modal
+                        const firstActionRow = new ActionRowBuilder().addComponents(raiseInput);
+                        modal.addComponents(firstActionRow);
+
                         collector.resetTimer();
 
-                        raiseCollector.on('collect', async (message) => {
-                            const raiseAmount = parseInt(message.content);
-                            if (raiseAmount > currentPlayer.chips) {
-                                await i.followUp("You don't have enough chips for that raise amount.");
+                        // Show the modal
+                        await i.showModal(modal);
+
+                        try {
+                            const modalResponse = await i.awaitModalSubmit({
+                                time: 60000,
+                                filter: i => i.customId === `raiseModal-${raiseIndex}`
+                            }).catch(() => null);
+
+                            raiseIndex++;
+                            
+                            if (!modalResponse) return;
+
+                            const raiseAmount = parseInt(modalResponse.fields.getTextInputValue('raiseAmount'));
+
+                            if (isNaN(raiseAmount) || raiseAmount <= 0) {
+                                await modalResponse.reply({ content: 'Please enter a valid positive number.', ephemeral: true });
                                 return;
                             }
 
+                            if (raiseAmount > currentPlayer.chips) {
+                                await modalResponse.reply({ content: "You don't have enough chips for that raise amount.", ephemeral: true });
+                                return;
+                            }
+
+                            await modalResponse.deferUpdate();
+
                             pots[0].ante += raiseAmount;
-                            const difference = pots[0].ante - currentPlayer.bet;
                             currentPlayer.chips -= difference;
                             currentPlayer.bet += difference;
                             pots[0].amount += difference;
@@ -1068,7 +1096,9 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
 
                             currentPlayerIndex++;
                             collector.stop();
-                        });
+                        } catch (error) {
+                            // console.error('Modal timed out.');
+                        }
                     } else {
                         if (i.customId === 'fold') {
                             await i.deferUpdate();
@@ -1213,8 +1243,6 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
 
             collector.on('end', async (collected, reason) => {
                 message.delete();
-
-                if(raiseCollector) raiseCollector.stop();
 
                 if (reason === 'time' ) {
                     await channel.send(`${currentPlayer.member.toString()} took too long to respond and has folded.`);

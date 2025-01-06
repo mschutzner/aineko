@@ -678,11 +678,11 @@ async function activityLoop(){
 async function generateUniqueQuestion(existingQuestions) {
 	try {
 		const response = await openai.chat.completions.create({
-			model: "gpt-3.5-turbo",
+			model: "gpt-4o-mini",
 			messages: [
 				{
 					role: "system",
-					content: "You are a helpful assistant that generates engaging discussion questions for an online community. Generate a unique, thought-provoking question that encourages discussion and interaction between community members. Make sure all questions are family friendly."
+					content: "You are a helpful assistant that generates engaging discussion questions for an online community. Generate a unique, thought-provoking question that encourages discussion and interaction between community members. Don't ask questions that would require the user to reveal personal information. Make sure the answer is suitable for all ages."
 				},
 				{
 					role: "user",
@@ -690,7 +690,6 @@ async function generateUniqueQuestion(existingQuestions) {
 				}
 			],
 			temperature: 0.8,
-			max_tokens: 100
 		});
 
 		return response.choices[0].message.content.replace(/['"]/g, '');
@@ -722,17 +721,75 @@ async function generateAndStoreQuestion() {
 	}
 }
 
+async function generateOnehundredUniqueQuestion(existingQuestions) {
+	try {
+		const response = await openai.chat.completions.create({
+			model: "gpt-4o-mini",
+			messages: [
+				{
+					role: "system",
+					content: "You are a helpful assistant that generates engaging discussion questions for an online community. Generate 100 unique, thought-provoking questions that encourage discussion and interaction between community members. Don't ask questions that would require the user to reveal personal information. Make sure the answers are suitable for all ages. Separate each question with a semicolon."
+				},
+				{
+					role: "user",
+					content: `Generate 100 unique discussion questions that are not similar to any of these existing questions: ${existingQuestions.join(", ")}. Separate each question with a ; character.`
+				}
+			],
+			temperature: 0.8,
+		});
+
+		// Split the response by semicolons and clean up each question
+		const questions = response.choices[0].message.content
+			.split(';')
+			.map(q => q.trim())
+			.filter(q => q.length > 0)
+			.map(q => q.replace(/^\d+[\.\)]\s*/, '')); // Remove any numbering
+
+		return questions;
+	} catch (error) {
+		console.error('Error generating questions:', error);
+		return null;
+	}
+}
+
+async function generateAndStoreOnehundredQuestion() {
+	const conn = await pool.getConnection();
+	try {
+		// Get all existing questions
+		const questionsDB = await conn.query('SELECT question FROM question;');
+		const existingQuestions = questionsDB[0].map(q => q.question);
+
+		// Generate new unique questions
+		const newQuestions = await generateOnehundredUniqueQuestion(existingQuestions);
+		
+		if (newQuestions && Array.isArray(newQuestions)) {
+			for (let i = 0; i < newQuestions.length; i++) {
+				// Store each question in the database
+				await conn.query('INSERT INTO question (question) VALUES (?);', [newQuestions[i]]);
+				console.log(`New question ${i + 1}/${newQuestions.length} stored:`, newQuestions[i]);
+				
+				// Add a small delay to avoid database congestion
+				await sleep(100);
+			}
+		}
+	} catch (error) {
+		console.error('Error in generateAndStoreOnehundredQuestion:', error);
+	} finally {
+		conn.release();
+	}
+}
+
 async function questionLoop() {
-	// Calculate time until next question time (14:00)
+	// Calculate time until next question time (6am PST)
 	let questionTime = new Date();
 	if (questionTime.getHours() >= 14) questionTime.setDate(questionTime.getDate() + 1);
 	questionTime.setHours(14, 0, 0, 0);
 	questionTime = questionTime.getTime();
 
-	// Calculate time until midnight for question generation
+	// Calculate time until midnight PST for question generation
 	let midnightTime = new Date();
-	if (midnightTime.getHours() >= 7) midnightTime.setDate(midnightTime.getDate() + 1);
-	midnightTime.setHours(7, 0, 0, 0);
+	if (midnightTime.getHours() >= 8) midnightTime.setDate(midnightTime.getDate() + 1);
+	midnightTime.setHours(8, 0, 0, 0);
 	midnightTime = midnightTime.getTime();
 	
 	const curTime = new Date().getTime();
@@ -742,12 +799,6 @@ async function questionLoop() {
 		// Schedule question generation for midnight
 		setTimeout(async () => {
 			await generateAndStoreQuestion();
-			// Schedule next generation for tomorrow midnight
-			setTimeout(async () => {
-				generateAndStoreQuestion();
-				// Continue scheduling daily
-				setInterval(generateAndStoreQuestion, 24 * 60 * 60 * 1000);
-			}, 24 * 60 * 60 * 1000 - (Date.now() % (24 * 60 * 60 * 1000)));
 		}, midnightTime - curTime);
 	}
 
@@ -847,9 +898,9 @@ async function patreonLoop(){
 								}
 							}
 									
-							// Fetch the owner and send a notification message
-							const owner = await client.users.fetch(process.env.BOT_OWNER_ID);
-							owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for renewing their Patreon!`);
+								// Fetch the owner and send a notification message
+								const owner = await client.users.fetch(process.env.BOT_OWNER_ID);
+								owner.send(`${userDB[0][0].name} just got 1000 Sritch Bucks for renewing their Patreon!`);
 						}
 					} else {
 						await conn.query('UPDATE `user` SET `is_patron` = 0 WHERE `user_id` = ?;', [userDB[0][0].user_id]);
