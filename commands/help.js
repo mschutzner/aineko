@@ -130,6 +130,14 @@ The command list is paginated if there are many commands. Use the Previous/Next 
                         // Add basic option info
                         optionDetails += `Required: ${option.required ? 'Yes' : 'No'}\n`;
                         
+                        // Add min/max if they exist
+                        if (option.min_value !== undefined) {
+                            optionDetails += `Minimum: ${option.min_value}\n`;
+                        }
+                        if (option.max_value !== undefined) {
+                            optionDetails += `Maximum: ${option.max_value}\n`;
+                        }
+                        
                         // Add choices if they exist
                         if (option.choices?.length > 0) {
                             optionDetails += `**Choices:**\n${option.choices

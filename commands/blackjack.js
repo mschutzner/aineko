@@ -286,7 +286,7 @@ module.exports = {
 				.setDescription("The amount of scritch bucks you'd like to wager.")
 				.setRequired(true)),
 	game: true,
-	help: `A casino card game where players compete against the dealer to get closest to 21 without going over.
+	help: `Blackjack is a casino card game where players compete against the dealer to get closest to 21 without going over.
 
 **Rules:**
 - Each player places a wager before receiving cards
@@ -330,7 +330,7 @@ module.exports = {
 				content: `${interaction.member.toString()} has started a game of blackjack with a wager of ฅ${wager}!
 The game will start <t:${Math.ceil(startTime/1000)+62}:R> or when the host starts it.
 ## Players:
-${interaction.member.toString()} - ฅ${wager}`,
+${interaction.member.toString()} ฅ${wager}`,
 				components: [createLobbyButtons()],
 				fetchReply: true
 			});
@@ -403,7 +403,7 @@ ${interaction.member.toString()} - ฅ${wager}`,
 								content: `${interaction.member.toString()} has started a game of blackjack!
 The game will start <t:${Math.ceil(startTime/1000)+62}:R> or when the host starts it.
 ## Players:
-${players.map(p => `**${p.toString()}** - ฅ${p.wager}`).join('\n')}`,
+${players.map(p => `**${p.toString()}** ฅ${p.wager}`).join('\n')}`,
 								components: [createLobbyButtons()]
 							});
 						} catch (err) {
@@ -449,7 +449,7 @@ ${players.map(p => `**${p.toString()}** - ฅ${p.wager}`).join('\n')}`,
 
 						await message.edit({
 							content: `Game cancelled by host. All players have been refunded.
-${players.map(p => `${p.toString()} - ฅ${p.wager} (refunded)`).join('\n')}`,
+${players.map(p => `${p.toString()} ฅ${p.wager} (refunded)`).join('\n')}`,
 							components: []
 						});
 						await channel.send('Game cancelled by host. All players have been refunded.');
@@ -461,7 +461,7 @@ ${players.map(p => `${p.toString()} - ฅ${p.wager} (refunded)`).join('\n')}`,
 					await message.edit({
 						content: `${interaction.member.toString()} has started a game of blackjack!
 ## Players:
-${players.map(p => `${p.toString()} - ฅ${p.wager}`).join('\n')}`,
+${players.map(p => `${p.toString()} ฅ${p.wager}`).join('\n')}`,
 						components: []
 					});
 
@@ -494,11 +494,14 @@ ${players.map(p => `${p.toString()} - ฅ${p.wager}`).join('\n')}`,
 ${formatDealerHand(dealerHand, true, emojis)}
 ## Player Hands`);
 
-					// Handle insurance and player turns
+					//show player hands
 					for await (const player of players) {
 						await channel.send(`${player.toString()}'s Hand (${player.value}):
 ${formatCards(player.hand, emojis)}`);
+					}
 
+					// Handle insurance and player turns
+					for await (const player of players) {
 						if (dealerHand[0][1] === 1) {
 							const insuranceTime = Date.now();
 							const insuranceMsg = await channel.send({ 
@@ -569,27 +572,26 @@ This option expires <t:${Math.ceil(insuranceTime/1000)+22}:R>`,
 					}
 					dealerValue = addCards(dealerHand);
 					await channel.send(`## Dealer's Final Hand (${dealerValue}${dealerValue > 21 ? ' busted' : ''}):
-${formatCards(dealerHand, emojis)}`);
-
-                    await channel.send('## Final Player Hands');
+${formatCards(dealerHand, emojis)}
+## Final Player Hands`);
 
 					for (const player of players) {
 						await channel.send(`${player.toString()}'s Hand (${player.value}):
 ${formatCards(player.hand, emojis)}`);
 					}
 
+					let resultMsg = '';
 					// Show individual results
 					for await (const player of players){
-						let resultMsg = '';
 						const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [player.id]);
 						
 						if(player.busted){
-							resultMsg = `## ${player.toString()} lost ฅ${player.wager}.`;
+							resultMsg += `## ${player.toString()} lost ฅ${player.wager}.\n`;
 							conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 								[player.id, userDB[0][0].scritch_bucks, player.user.username]);
 						} else if(player.surrendered){
 							const loss = Math.ceil(player.wager/2);
-							resultMsg = `## ${player.toString()} lost ฅ${loss}.`;
+							resultMsg += `## ${player.toString()} lost ฅ${loss}.\n`;
 							
 							const newScritchBucks = userDB[0][0].scritch_bucks + player.wager-loss;
 							await conn.query('UPDATE `user` SET `scritch_bucks` = ? WHERE `user_id` = ?;', 
@@ -598,7 +600,7 @@ ${formatCards(player.hand, emojis)}`);
 								[player.id, newScritchBucks, player.user.username]);
 						} else if(addCards(dealerHand) > 21 || player.value > addCards(dealerHand)){
 							const win = (player.value == 21) ? Math.ceil(player.wager*1.5) : player.wager;
-							resultMsg = `## ${player.toString()} won ฅ${win}.`;
+							resultMsg += `## ${player.toString()} won ฅ${win}.\n`;
 							
 							const newScritchBucks = userDB[0][0].scritch_bucks + player.wager + win;
 							const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
@@ -607,17 +609,16 @@ ${formatCards(player.hand, emojis)}`);
 							conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 								[player.id, newScritchBucks, player.user.username]);
 						} else if(player.value == addCards(dealerHand)){
-							resultMsg = `${player.toString()} pushed.`;
+							resultMsg += `## ${player.toString()} pushed.\n`;
 							await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` + ? WHERE `user_id` = ?;', 
 								[player.wager, player.id]);
 						} else {
-							resultMsg = `## ${player.toString()} lost ฅ${player.wager}.`;
+							resultMsg += `## ${player.toString()} lost ฅ${player.wager}.\n`;
 							await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 								[player.id, userDB[0][0].scritch_bucks, player.user.username]);
 						}
-						
-						await channel.send(resultMsg);
 					}
+					await channel.send(resultMsg);
 
 					await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
 				} catch (err) {
@@ -639,7 +640,7 @@ ${formatCards(player.hand, emojis)}`);
 						
 						await message.edit({
 							content: `Game cancelled due to an error. All wagers have been refunded.
-${players.map(p => `${p.toString()} - ฅ${p.wager} (refunded)`).join('\n')}`,
+${players.map(p => `${p.toString()} ฅ${p.wager} (refunded)`).join('\n')}`,
 							components: []
 						});
 					} catch (refundErr) {

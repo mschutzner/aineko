@@ -94,7 +94,7 @@ client.on("interactionCreate", async interaction => {
 				const userCatDB = await conn.query('SELECT * FROM `user_cat` WHERE (`user_id`, `cat_id`) = (?, ?);', [member.id, command.catId]);
 				if(userCatDB[0].length == 0)
 					return  interaction.reply({ 
-						content: `You need to own ${catDB[0][0].name} to use /${interaction.commandName}.`,
+						content: `You need to own ${catDB[0][0].name} to use \`/${interaction.commandName}\`.`,
 						ephemeral: true 
 					}); 
 			}
@@ -682,7 +682,7 @@ async function generateUniqueQuestion(existingQuestions) {
 			messages: [
 				{
 					role: "system",
-					content: "You are a helpful assistant that generates engaging discussion questions for an online community. Generate a unique, thought-provoking question that encourages discussion and interaction between community members. Don't ask questions that would require the user to reveal personal information. Make sure the answer is suitable for all ages."
+					content: "You are a helpful assistant that generates engaging discussion questions for an online community. Generate a unique, thought-provoking question that encourages discussion and interaction between community members. Don't ask questions that have to do with meeting people or characters. Don't ask questions about favorite animals. Don't ask questions that would require the user to reveal personal information. Make sure the answer is suitable for all ages."
 				},
 				{
 					role: "user",

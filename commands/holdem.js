@@ -64,7 +64,7 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
     // Assign positions based on number of players
     let dealerPlayer, smallBlindPlayer, bigBlindPlayer;
 
-    const pots = [
+    let pots = [
         {
             players: [...players]
         }
@@ -96,7 +96,7 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
     }
     
     pots[0].amount = smallBlindPlayer.bet;
-    pots[0].ante = smallBlindPlayer.bet;
+    pots[0].callAmount = smallBlindPlayer.bet;
 
     let bigBlindMessage = `${bigBlindPlayer.member.toString()} payed the big blind of ฅ${bigBlindAmount}.`
     if(bigBlindPlayer.chips < smallBlindPlayer.bet){
@@ -105,18 +105,18 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
         bigBlindPlayer.allIn = true;
         pots[0].players = pots[0].players.filter(player => player.member.id !== bigBlindPlayer.member.id);
 
-        smallBlindPlayer.bet = pots[0].ante;
+        smallBlindPlayer.bet = pots[0].callAmount;
         
         pots[0].amount -= bigBlindPlayer.bet;
-        pots[0].ante -= bigBlindPlayer.bet; 
+        pots[0].callAmount -= bigBlindPlayer.bet; 
 
         //make the side pot
         pots.push({
             amount: bigBlindPlayer.bet * 2,
-            ante: bigBlindPlayer.bet,
+            callAmount: bigBlindPlayer.bet,
             players: [bigBlindPlayer, smallBlindPlayer],
         });
-        bigBlindMessage = `${bigBlindPlayer.member.toString()} can not afford the big blind and the game must go all in, creating side pot 1, and making the effective big blind ฅ${pots[0].ante}.`;
+        bigBlindMessage = `${bigBlindPlayer.member.toString()} can not afford the big blind and the game must go all in, creating side pot 1, and making the effective big blind ฅ${pots[0].callAmount}.`;
     } else {
         if(bigBlindPlayer.chips <= bigBlindAmount){
             bigBlindPlayer.bet = bigBlindPlayer.chips;
@@ -133,27 +133,27 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
         }
 
         pots[0].amount += bigBlindPlayer.bet;
-        pots[0].ante = bigBlindPlayer.bet;
+        pots[0].callAmount = bigBlindPlayer.bet;
 
         if(smallBlindPlayer.allIn){
             const bigBlindTotalBet = bigBlindPlayer.bet;
             bigBlindPlayer.bet -= smallBlindPlayer.bet;
             
             pots[0].amount -= smallBlindPlayer.bet * 2;
-            pots[0].ante -= smallBlindPlayer.bet; 
+            pots[0].callAmount -= smallBlindPlayer.bet; 
             pots[0].players = pots[0].players.filter(player => player.member.id !== smallBlindPlayer.member.id);
     
             //make the side pot
             pots.push({
                 amount: smallBlindPlayer.bet * 2,
-                ante: smallBlindPlayer.bet,
+                callAmount: smallBlindPlayer.bet,
                 players: [bigBlindPlayer, smallBlindPlayer],
             });
 
             if(bigBlindTotalBet < bigBlindAmount){
-                bigBlindMessage = `${bigBlindPlayer.member.toString()} can not afford the big blind and must go all in and ${smallBlindPlayer.member.toString()} cannot match the bet so side pot 1 was created and the effective big blind is ฅ${pots[0].ante}.`;
+                bigBlindMessage = `${bigBlindPlayer.member.toString()} can not afford the big blind and must go all in and ${smallBlindPlayer.member.toString()} cannot match the bet so side pot 1 was created and the effective big blind is ฅ${pots[0].callAmount}.`;
             } else {
-                bigBlindMessage += `\n${smallBlindPlayer.member.toString()} cannot match the bet so side pot 1 was created making the effective big blind ฅ${pots[0].ante}.`;
+                bigBlindMessage += `\n${smallBlindPlayer.member.toString()} cannot match the bet so side pot 1 was created making the effective big blind ฅ${pots[0].callAmount}.`;
             }
 
         }
@@ -196,29 +196,7 @@ async function playHoldemRound(players, host, buyIn, smallBlindAmount, bigBlindA
     // players[1].chips = 7 - players[1].bet;
     // if(players[2]) players[2].chips = 5 - players[2].bet;
 
-    
-    // skip bets if there is one or less player not all in
-    if(players.filter(player => !player.allIn).length <= 1){
-        let explination;
-        if(players.filter(player => !player.allIn).length === 0){
-            explination = `## All players are all in so continuing to results.`;
-        } else {
-            explination = `## There is only one player not all in so continuing to results.`;
-        }
-
-
-        await channel.send(`## Game started!
-${dealerPlayer.member.toString()} shuffled the deck and dealt the cards to your direct messages.
-${smallBlindMessage}
-${bigBlindMessage}
-${explination}
-**Community Cards**:
-${communityCardsString(communityCards, 3, emojis)}
-Main Pot: ${pots[0].amount}
-${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
-
-        return determineWinner(communityCards, players, pots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
-    }
+    let folded = false;
     
     // Send game start message to the channel
     await channel.send(`## Game started!
@@ -241,36 +219,58 @@ ${player.hand.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`);
     }
     
     await channel.send(`## Time for initial bets`);
-    const [preflopPlayers, preflopPots, preflopFolded] = await playHoldemStage(players, pots, 0, communityCards, channel, conn, emojis);
-    if(preflopFolded || preflopPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, preflopPlayers, preflopPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
+    [players, pots, folded] = await playHoldemStage(players, pots, 0, communityCards, channel, conn, emojis);
+    if(folded || players.filter(player => !player.allIn && !player.folded).length <= 1) {
+        await channel.send(`## Skipping to the showdown
+**Community Cards**:
+${communityCardsString(communityCards, 3, emojis)}
+Main Pot: ${pots[0].amount}
+${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+        return determineWinner(communityCards, players, pots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
+    }
    
-    if(preflopPlayers.length === 2) preflopPlayers.reverse();
+    if(players.length === 2) players.reverse();
    
     await channel.send(`## Proceeding to the flop.
 **Community Cards**:
 ${communityCardsString(communityCards, 1, emojis)}
-Main Pot: ${preflopPots[0].amount}
+Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
-    const [flopPlayers, flopPots, flopFolded] = await playHoldemStage(preflopPlayers, preflopPots, 1, communityCards, channel, conn, emojis);
-    if(flopFolded || flopPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, flopPlayers, flopPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
+    [players, pots, folded] = await playHoldemStage(players, pots, 1, communityCards, channel, conn, emojis);
+    if(folded || players.filter(player => !player.allIn && !player.folded).length <= 1) {
+        await channel.send(`## Skipping to the showdown
+**Community Cards**:
+${communityCardsString(communityCards, 3, emojis)}
+Main Pot: ${pots[0].amount}
+${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+        return determineWinner(communityCards, players, pots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
+    }
    
     await channel.send(`## Now it's time for the turn.
 **Community Cards**:
 ${communityCardsString(communityCards, 2, emojis)}
-Main Pot: ${flopPots[0].amount}
+Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
-    const [turnPlayers, turnPots, turnFolded] = await playHoldemStage(flopPlayers, flopPots, 2, communityCards, channel, conn, emojis);
-    if(turnFolded || turnPlayers.filter(player => !player.allIn && !player.folded).length <= 1) return determineWinner(communityCards, turnPlayers, turnPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
+    [players, pots, folded] = await playHoldemStage(players, pots, 2, communityCards, channel, conn, emojis);
+    if(folded || players.filter(player => !player.allIn && !player.folded).length <= 1) {
+        await channel.send(`## Skipping to the showdown
+**Community Cards**:
+${communityCardsString(communityCards, 3, emojis)}
+Main Pot: ${pots[0].amount}
+${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
+        return determineWinner(communityCards, players, pots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
+    }
    
     await channel.send(`## Sailing down the river!
 **Community Cards**:
 ${communityCardsString(communityCards, 3, emojis)}
-Main Pot: ${turnPots[0].amount}
+Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
-    const [riverPlayers, riverPots, riverFolded] = await playHoldemStage(turnPlayers, turnPots, 3, communityCards, channel, conn, emojis);
+    [players, pots, folded] = await playHoldemStage(players, pots, 3, communityCards, channel, conn, emojis);
     
-    await channel.send("## It's the final showdown!");
-    return determineWinner(communityCards, riverPlayers, riverPots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
+    await channel.send(`## It's the final showdown!
+## Player Hands:`);
+    return determineWinner(communityCards, players, pots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis);
 }
 
 async function determineWinner(communityCards, players, pots, host, buyIn, smallBlindAmount, bigBlindAmount, channel, conn, emojis) {    
@@ -392,7 +392,6 @@ async function determineWinner(communityCards, players, pots, host, buyIn, small
         } else if (counts.filter(count => count >= 2).length >= 2 && counts.filter(count => count >= 3).length >= 1) {
             rank = 7;
             handName = "Full House";
-            handName = "Full House";
             const threeValue = Number(Object.keys(valueCounts).find(key => valueCounts[key] >= 3));
             const twoValue = Number(Object.keys(valueCounts).find(key => key != threeValue && valueCounts[key] >= 2));
             bestHand = [
@@ -403,7 +402,7 @@ async function determineWinner(communityCards, players, pots, host, buyIn, small
             const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
                 [player.member.id, 9, player.member.displayName, 'Joey']);
             if(userCatDB[0].affectedRows){
-                await channel.send({content: `<@${player.member.id}> just gained ownership of Joey by getting a full house! This unlocks the \`/shadowdale\` command (coming soon).`, files: ['images/cats/Joey.jpg']});
+                await channel.send({content: `<@${player.member.id}> just gained ownership of Joey by getting a full house! This unlocks the \`/shadowdale\` command.`, files: ['images/cats/Joey.jpg']});
             }
         } else if (isFlush) {
             rank = 6;
@@ -564,7 +563,6 @@ async function determineWinner(communityCards, players, pots, host, buyIn, small
     const blankEmoji = getEmoji(emojis, 'blank');
 
     // Construct the message to show hands
-    await channel.send("## Player Hands:");
     for (const result of finalResults) {
         for (const player of result) {
             await channel.send(`${player.member.toString()} - ${player.handName}
@@ -577,7 +575,7 @@ ${player.bestHand.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ${blankE
     finalResults.reverse();
 
     // Sort pots by ante amount (highest to lowest)
-    pots.sort((a, b) => b.ante - a.ante);
+    pots.sort((a, b) => b.callAmount - a.callAmount);
 
     //distribute pots
     for(const pot of pots) {
@@ -680,8 +678,8 @@ async function completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmo
     const message = await channel.send({
         content: `## Round over!
 Players of the last round now have:
-${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.chips === 0 ? ' (busted)' : ''}`).join('\n')}
-${newHost ? `\n${host.toString()} is the new host.\n\n` : ''}Host must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.. 
+${previousPlayers.map(player => `${player.member.toString()} ฅ${player.chips}${player.chips === 0 ? ' (busted)' : ''}`).join('\n')}
+${newHost ? `\n${host.toString()} is the new host.\n\n` : ''}Host must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
 Players can cash out now, new players can join, and the host can start the next round or cancel the game.
 ## Players in next game:
 ${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (host)' : ''}`).join('\n')}`,
@@ -700,6 +698,11 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                 // Check if player is already in game
                 if (players.some(p => p.member.id === i.user.id)) {
                     await i.reply({ content: "You're already in the game.", ephemeral: true });
+                    return;
+                }
+
+                if(players.length >= 10) {
+                    await i.reply({ content: "The game is too full. Only 10 players can join.", ephemeral: true });
                     return;
                 }
 
@@ -733,8 +736,8 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                 await message.edit({
                     content: `## Round over!
 Players of the last round now have:
-${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.cashedOut ? ' (cashed out)' : player.chips === 0 ? ' (busted)' : ''}`).join('\n')}
-${newHost ? `\n${host.toString()} is the new host.\n\n` : ''}Host must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.. 
+${previousPlayers.map(player => `${player.member.toString()} ฅ${player.chips}${player.cashedOut ? ' (cashed out)' : player.chips === 0 ? ' (busted)' : ''}`).join('\n')}
+${newHost ? `\n${host.toString()} is the new host.\n\n` : ''}Host must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
 Players can cash out now, new players can join, and the host can start the next round or cancel the game.
 ## Players in next game:
 ${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (host)' : ''}`).join('\n')}`,
@@ -783,19 +786,11 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                     await i.reply(`${i.user.toString()} has cashed out ${player.chips} scritch bucks.`);
                 }
 
-                // Add strikethrough to the player's chips line in the message
-                const messageLines = message.content.split('\n');
-                const playerLine = messageLines.findIndex(line => line.includes(`${i.user.toString()}`) && !line.includes('(cashed out)'));
-                if (playerLine !== -1) {
-                    messageLines[playerLine] = `${messageLines[playerLine]} (cashed out)`;
-                    await message.edit(messageLines.join('\n'));
-                }
-
                 await message.edit({
                     content: `## Round over!
 Players of the last round now have:
-${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.cashedOut ? ' (cashed out)' : player.chips === 0 ? ' (busted)' : ''}`).join('\n')}
-${newHost ? `\n${host.toString()} is the new host.\n\n` : ''}Host must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.. 
+${previousPlayers.map(player => `${player.member.toString()} ฅ${player.chips}${player.cashedOut ? ' (cashed out)' : player.chips === 0 ? ' (busted)' : ''}`).join('\n')}
+${newHost ? `\n${host.toString()} is the new host.\n\n` : ''}Host must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out. 
 Players can cash out now, new players can join, and the host can start the next round or cancel the game.
 ## Players in next game:
 ${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (host)' : ''}`).join('\n')}`,
@@ -835,7 +830,7 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
             await message.edit({
                 content: `## Round over!
 Players of the last round now have:
-${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.cashedOut ? ' (cashed out)' : player.chips === 0 ? ' (busted)' : ''}`).join('\n')}`,
+${previousPlayers.map(player => `${player.member.toString()} ฅ${player.chips}${player.cashedOut ? ' (cashed out)' : player.chips === 0 ? ' (busted)' : ''}`).join('\n')}`,
                 components: []
             });
 
@@ -869,7 +864,7 @@ ${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips
             await message.edit({
                 content: `## Game Ended
 Players of the last round now have:
-${previousPlayers.map(player => `${player.member.toString()} - ฅ${player.chips}${player.chips === 0 ? ' (busted)' : ' (cashed out)'}`).join('\n')}`,
+${previousPlayers.map(player => `${player.member.toString()} ฅ${player.chips}${player.chips === 0 ? ' (busted)' : ' (cashed out)'}`).join('\n')}`,
                 components: []
             });
 
@@ -946,7 +941,7 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
             } else {
                 // Check if we need another round
                 const needsAnotherRound = players.some(player => 
-                    !player.folded && !player.allIn && player.bet < pots[0].ante
+                    !player.folded && !player.allIn && player.bet < pots[0].callAmount
                 );
 
                 if (needsAnotherRound) {
@@ -957,10 +952,10 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
             }
         }
         
-        const actionRow = createPokerButtons(currentPlayer.bet === pots[0].ante); // Create buttons for player actions
+        const actionRow = createPokerButtons(currentPlayer.bet === pots[0].callAmount); // Create buttons for player actions
         
         const message = await channel.send({
-            content: `${currentPlayer.member.toString()}, it's your turn! You have ฅ${currentPlayer.chips} chips left. The call amount is ฅ${pots[0].ante} and your current bet is ฅ${currentPlayer.bet}${pots[0].ante - currentPlayer.bet >= currentPlayer.chips ? ' and you must go all in to continue' : ''}. Act quick or you will fold <t:${Math.ceil(Date.now()/1000)+60}:R>.`,
+            content: `${currentPlayer.member.toString()}, it's your turn! You have ฅ${currentPlayer.chips} chips left. The call amount is ฅ${pots[0].callAmount} and your current bet is ฅ${currentPlayer.bet}${pots[0].callAmount - currentPlayer.bet >= currentPlayer.chips ? ' and you must go all in to continue' : ''}. Act quick or you will fold <t:${Math.ceil(Date.now()/1000)+60}:R>.`,
             components: actionRow
         });
 
@@ -980,7 +975,7 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                     }
 
                     if (i.customId === 'raise') {
-                        const difference = pots[0].ante - currentPlayer.bet;
+                        let difference = pots[0].callAmount - currentPlayer.bet;
                         if(currentPlayer.chips <= difference) {
                             await i.reply({
                                 content: `You must go all-in.`,
@@ -1001,8 +996,7 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                             .setStyle(TextInputStyle.Short)
                             .setPlaceholder('Enter amount')
                             .setRequired(true)
-                            .setMinLength(1)
-                            .setMaxLength(10);
+                            .setMinLength(1);
 
                         // Add the text input to the modal
                         const firstActionRow = new ActionRowBuilder().addComponents(raiseInput);
@@ -1022,6 +1016,7 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                             raiseIndex++;
                             
                             if (!modalResponse) return;
+                            await modalResponse.deferUpdate();
 
                             const raiseAmount = parseInt(modalResponse.fields.getTextInputValue('raiseAmount'));
 
@@ -1035,9 +1030,9 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                                 return;
                             }
 
-                            await modalResponse.deferUpdate();
+                            difference += raiseAmount;
 
-                            pots[0].ante += raiseAmount;
+                            pots[0].callAmount += raiseAmount;
                             currentPlayer.chips -= difference;
                             currentPlayer.bet += difference;
                             pots[0].amount += difference;
@@ -1046,12 +1041,12 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                             const shortStackedPlayers = [];
                             for(const player of pots[0].players){
                                 if(player.member.id === currentPlayer.member.id || !player.allIn) continue;
-                                if(player.bet < pots[0].ante){ // Check current bet against ante
+                                if(player.bet < pots[0].callAmount){ // Check current bet against ante
                                     shortStackedPlayers.push(player);
                                 }
                             }
                             if(shortStackedPlayers.length > 0){ //make side pots for short stacked players
-                                let sidePotMessage = `${currentPlayer.member.toString()} raised to ฅ${currentPlayer.bet} and has ฅ${currentPlayer.chips} left.\n`;
+                                let sidePotMessage = `${currentPlayer.member.toString()} raised by ฅ${raiseAmount} and has ฅ${currentPlayer.chips} left.\n`;
                                 
                                 outerLoop:
                                 for(const shortStackedPlayer of shortStackedPlayers){
@@ -1060,7 +1055,7 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                                     }
 
                                     // reduce the pot and ante for the main pot
-                                    pots[0].ante -= shortStackedPlayer.bet; 
+                                    pots[0].callAmount -= shortStackedPlayer.bet; 
                                     pots[0].amount -= shortStackedPlayer.bet;
 
                                     //  create side pot
@@ -1087,7 +1082,7 @@ ${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                             } else {
-                                await channel.send(`${currentPlayer.member.toString()} raised to ฅ${currentPlayer.bet} and has ฅ${currentPlayer.chips} left..
+                                await channel.send(`${currentPlayer.member.toString()} raised by ฅ${raiseAmount} and has ฅ${currentPlayer.chips} left..
 **Community Cards**:
 ${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}
@@ -1097,7 +1092,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                             currentPlayerIndex++;
                             collector.stop();
                         } catch (error) {
-                            // console.error('Modal timed out.');
+                            // console.error(error);
                         }
                     } else {
                         if (i.customId === 'fold') {
@@ -1117,7 +1112,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                 }
                             }
                         } else if (i.customId === 'call') {
-                            const difference = pots[0].ante - currentPlayer.bet;
+                            let difference = pots[0].callAmount - currentPlayer.bet;
 
                             if(currentPlayer.chips <= difference) {
                                 await i.reply({
@@ -1126,7 +1121,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                 });
                                 return;
                             } else  {
-                                const meetsCallAmount = currentPlayer.bet === pots[0].ante;
+                                const meetsCallAmount = currentPlayer.bet === pots[0].callAmount;
                                 currentPlayer.chips -= difference;
                                 currentPlayer.bet += difference;
                                 pots[0].amount += difference;
@@ -1143,21 +1138,21 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
 
                             //calculate the bet
                             currentPlayer.bet += currentPlayer.chips;
-                            if(currentPlayer.bet >= pots[0].ante) { //the player can afford the main pot
-                                const difference = currentPlayer.bet - pots[0].ante;
-                                pots[0].ante += difference;
+                            if(currentPlayer.bet >= pots[0].callAmount) { //the player can afford the main pot
+                                let difference = currentPlayer.bet - pots[0].callAmount;
+                                pots[0].callAmount += difference;
                                 pots[0].amount += currentPlayer.chips;
 
                                 // check for short stacked players
                                 const shortStackedPlayers = [];
                                 for(const player of pots[0].players){
                                     if(player.member.id === currentPlayer.member.id || !player.allIn) continue;
-                                    if(player.bet < pots[0].ante){ // Check current bet against ante
+                                    if(player.bet < pots[0].callAmount){ // Check current bet against ante
                                         shortStackedPlayers.push(player);
                                     }
                                 }
                                 if(shortStackedPlayers.length > 0){ //make side pots for short stacked players
-                                    let sidePotMessage = `${currentPlayer.member.toString()} has gone all-in raising their bet to ฅ${currentPlayer.bet}\n`;
+                                    let sidePotMessage = `${currentPlayer.member.toString()} has gone all-in raising their bet to ฅ${currentPlayer.bet}.\n`;
                                     outerLoop:
                                     for(const shortStackedPlayer of shortStackedPlayers){
                                         for(let i = 1; i < pots.length; i++){
@@ -1165,7 +1160,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                         }
 
                                         // reduce the pot and ante for the main pot
-                                        pots[0].ante -= shortStackedPlayer.bet; 
+                                        pots[0].callAmount -= shortStackedPlayer.bet; 
                                         pots[0].amount -= shortStackedPlayer.bet;
 
                                         //  create side pot
@@ -1192,14 +1187,14 @@ ${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                                 } else {
-                                    await channel.send(`${currentPlayer.member.toString()} has gone all-in raising the ante to ฅ${pots[0].ante}!
+                                    await channel.send(`${currentPlayer.member.toString()} has gone all-in raising the ante to ฅ${pots[0].callAmount}!
 **Community Cards**:
 ${communityCardsString(communityCards, stage, emojis)}
 Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
                                 }
                             } else { // the player is making a side pot// reduce the pot and ante for the main pot
-                                pots[0].ante -= currentPlayer.bet; 
+                                pots[0].callAmount -= currentPlayer.bet; 
                                 pots[0].amount -= startingBet;
 
                                 //  create side pot
@@ -1259,15 +1254,17 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                 }
 
                 if (currentPlayerIndex < players.length) {
-                    processPlayerAction().then(resolve);
+                    const result = await processPlayerAction();
+                    resolve(result);
                 } else {
                     const needsAnotherRound = players.some(player => 
-                        !player.folded && !player.allIn && player.bet < pots[0].ante
+                        !player.folded && !player.allIn && player.bet < pots[0].callAmount
                     );
 
                     if (needsAnotherRound) {
                         currentPlayerIndex = 0;
-                        processPlayerAction().then(resolve);
+                        const result = await processPlayerAction();
+                        resolve(result);
                     } else {
                         resolve([players, pots]);
                     }
@@ -1283,17 +1280,18 @@ module.exports = {
         .setName('holdem')
         .setDescription('Start a game of Texas Hold\'em')
         .addIntegerOption(option =>
-            option.setName('buy_in')
+            option.setName('buy-in')
                 .setDescription('Amount of scritch bucks to buy in with')
-                .setRequired(true)),
+                .setRequired(true)
+				.setMinValue(5)),
     game: true,
     image: 'https://cdn.discordapp.com/attachments/1000574162017992884/1325624155919614034/holdem-hands.jpeg',
     help: `Texas Hold'em is a popular poker variant where players try to make the best hand using their hole cards and community cards.
 
 **Game Flow:**
-1. Each player is dealt 2 private cards (hole cards)
+1. The game uses a standard 52-card deck that is shuffled at the start of every round. The dealer deals 5 cards face down to the middle of the table which are called the **community cards**. Then, each player is dealt 2 private cards (their **hole cards**)
 2. Betting occurs in 4 rounds:
-   - Pre-flop (after hole cards)
+   - Initial betting
    - Flop (first 3 community cards)
    - Turn (4th community card)
    - River (5th community card)
@@ -1301,23 +1299,28 @@ module.exports = {
 
 **Betting Rules:**
 - Small blind and big blind are posted automatically (1% and 2% of buy-in)
+- The call amount starts at the big blind amount and goes up if a player raises or goes all-in past the call amount
+- There are no bet limits
 - On your turn, you can:
    - Fold: Give up your hand
    - Call/Check: Match the current bet
    - Raise: Increase the betting amount
    - All-in: Bet all remaining chips
+- The main pot is a pool of bets which are won by the winner of the round
 - Side Pots are created when players goes all-in with fewer chips than the current bet or when all-in players are short stacked:
-    - Includes bets from all players who already matched the bet
-    - Players with more chips can continue betting in the main pot
-    - If all players in a side pot but one fold, the remaining player wins the side pot
+   - The all-in amount is removed from the main pot for each player that contributed that amount and added to that side pot
+   - Players with more chips can continue betting in the main pot
+   - If all players in a side pot but one fold, the remaining player wins the side pot at the end of the round even if they don't show their hand 
+   - Pots are distributed at the end of the round
 
 **Winning:**
 - Best 5-card hand wins using any combination of your hole cards and community cards
+- Aces are high or low depending on what is best for the player
 - Players with the same hand rank win based on high card
 - The winner wins any pots they contributed to
 - If the winner didn't contribute to a pot that pot is distributed to the next winner in that pot`,
     async execute(interaction, pool, emojis) { 
-        const buyIn = interaction.options.getInteger('buy_in');
+        const buyIn = interaction.options.getInteger('buy-in');
         const channel = interaction.channel;
         const startTime = Date.now();
 
@@ -1369,7 +1372,7 @@ ${interaction.member.toString()} (host)`,
                 [interaction.member.id, userDB[0][0].scritch_bucks - buyIn, interaction.member.user.username]);
 
             // Create list of players with their chips
-            const players = [{
+            let players = [{
                 member: interaction.member,
                 chips: buyIn,
                 bet: 0,
@@ -1388,6 +1391,11 @@ ${interaction.member.toString()} (host)`,
                         // Check if player is already in game
                         if (players.some(p => p.member.id === i.user.id)) {
                             await i.reply({ content: "You're already in the game.", ephemeral: true });
+                            return;
+                        }
+
+                        if(players.length >= 10) {
+                            await i.reply({ content: "The game is too full. Only 10 players can join.", ephemeral: true });
                             return;
                         }
 
