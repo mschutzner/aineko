@@ -35,11 +35,13 @@ function getAllCommandNames() {
 let command;
 if (commandName === "help") {
     command = require(`../commands/${commandName}.js`);
-    const choices = getAllCommandNames().map(name => ({
-        name: name,
-        value: name
-    }));
-    command.data.options[0].addChoices(...choices);
+    const choices = getAllCommandNames()
+        .map(name => ({
+            name: name,
+            value: name
+        }));
+    // Clear existing choices and add new ones
+    command.data.options[0].setChoices(...choices);
 } else {
     command = require(`../commands/${commandName}.js`);
 }

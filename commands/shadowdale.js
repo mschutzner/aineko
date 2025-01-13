@@ -81,7 +81,7 @@ const wildMagicTable = [
     '### Random Reveal (9): A random player that has not folded must reveal their hole cards.',
     '### The Big Reveal (10): All players still in the game must reveal their hole cards.',
     '### Instant Showdown (11): All community cards are revealed and the game skips straight to the Showdown.',
-    '### Ultimate Showdown (12): All players still in the round must raise to the bet limit and the game skips straight to the Showdown.'
+    '### Ultimate Showdown (12): All players still in the round must raise to the bet limit or go all-in without side pots and the game skips straight to the Showdown.'
 ]
 
 const modronNames = [
@@ -235,133 +235,19 @@ ${player.hand.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`);
             for(const currentPlayer of players){
                 let newCallAmount = pots[0].callAmount + betLimit;
                 if(currentPlayer.folded || currentPlayer.allIn) continue;
-                if(currentPlayer.bet + currentPlayer.chips === newCallAmount) {
+                if(currentPlayer.bet + currentPlayer.chips <= newCallAmount) {
                     // all in
                     currentPlayer.bet += currentPlayer.chips;
                     let difference = currentPlayer.bet - pots[0].callAmount;
                     pots[0].amount += currentPlayer.chips;
-
-                    raiseMessage += `${currentPlayer.member.toString()} has gone all-in raising their bet to ${currentPlayer.bet} chips.\n`;
-
-                    // check for short stacked players
-                    const shortStackedPlayers = [];
-                    for(const player of pots[0].players){
-                        if(player.member.id === currentPlayer.member.id || !player.allIn) continue;
-                        if(player.bet < pots[0].callAmount + difference){ // Check current bet against ante
-                            shortStackedPlayers.push(player);
-                        }
-                    }
-                    if(shortStackedPlayers.length > 0){ //make side pots for short stacked players
-                        outerLoop:
-                        for(const shortStackedPlayer of shortStackedPlayers){
-                            for(let i = 1; i < pots.length; i++){
-                                if(pots[i].players.some(p => p.member.id === shortStackedPlayer.member.id)) continue outerLoop;
-                            }
-
-                            // reduce the pot and ante for the main pot
-                            pots[0].callAmount -= shortStackedPlayer.bet + difference;
-                            newCallAmount -= shortStackedPlayer.bet + difference;
-                            pots[0].amount -= shortStackedPlayer.bet;
-
-                            //  create side pot
-                            let sidePotAmount = shortStackedPlayer.bet;
-                            let sidePotPlayers = [shortStackedPlayer];
-                            for(const player of pots[0].players){ //remove all bet from the main pot for all players in the main pot
-                                if(player.member.id === shortStackedPlayer.member.id) continue;  
-                                if(player.bet >= shortStackedPlayer.bet){
-                                    pots[0].amount -= shortStackedPlayer.bet;
-                                    player.bet -= shortStackedPlayer.bet;
-                                    sidePotAmount += shortStackedPlayer.bet;
-                                    sidePotPlayers.push(player);
-                                }
-                            }//make the side pot
-                            pots.push({
-                                amount: sidePotAmount,
-                                players: [...sidePotPlayers],
-                            });
-                            pots[0].players = pots[0].players.filter(player => player.member.id !== shortStackedPlayer.member.id); //remove the short stacked player from the main pot
-                            raiseMessage += `${shortStackedPlayer.member.toString()} is all-in and cannot match the bet so side pot ${pots.length-1} was created.\n`;
-                        }
-                    }
-                    //make the player all in
-                    currentPlayer.chips = 0;
-                    currentPlayer.allIn = true;
-                    pots[0].callAmount += betLimit;
-                } else if(currentPlayer.bet + currentPlayer.chips < newCallAmount) {
-                    // all in
-                    pots[0].amount -= currentPlayer.bet;
-                    pots[0].callAmount -= currentPlayer.bet;
-                    currentPlayer.bet += currentPlayer.chips; 
-
-                    //  create side pot
-                    let sidePotAmount = currentPlayer.bet;
-                    let sidePotPlayers = [currentPlayer];
-                    for(const player of pots[0].players){ //remove bet from the main pot for all players in the main pot
-                        if(player.member.id === currentPlayer.member.id) continue;  
-                        if(player.bet >= currentPlayer.bet){
-                            pots[0].amount -= currentPlayer.bet;
-                            player.bet -= currentPlayer.bet;
-                            sidePotAmount += currentPlayer.bet;
-                            sidePotPlayers.push(player);
-                        }
-                    }
-                    pots[0].players = pots[0].players.filter(player => player.member.id !== currentPlayer.member.id); //remove the player from the main pot
-                    //make the side pot
-                    pots.push({
-                        amount: sidePotAmount,
-                        players: [...sidePotPlayers],
-                    });
-                    raiseMessage += `${currentPlayer.member.toString()} has gone all-in, starting side pot ${pots.length-1}!\n`;
-                    //make the player all in
-                    currentPlayer.chips = 0;
-                    currentPlayer.allIn = true;
+                    raiseMessage += `${currentPlayer.member.toString()} has gone all-in for ${currentPlayer.chips} chips.\n`;
                 } else {
+                    //raise
                     let difference = newCallAmount - currentPlayer.bet;
                     currentPlayer.chips -= difference;
                     currentPlayer.bet += difference;
                     pots[0].amount += difference;
-
                     raiseMessage += `${currentPlayer.member.toString()} raised by ${betLimit} chips and has ${currentPlayer.chips} chips left.\n`
-
-                    // check for short stacked players
-                    const shortStackedPlayers = [];
-                    for(const player of pots[0].players){
-                        if(player.member.id === currentPlayer.member.id || !player.allIn) continue;
-                        if(player.bet < newCallAmount){ // Check current bet against ante
-                            shortStackedPlayers.push(player);
-                        }
-                    }
-                    if(shortStackedPlayers.length > 0){ //make side pots for short stacked players;
-                        outerLoop:
-                        for(const shortStackedPlayer of shortStackedPlayers){
-                            for(let i = 1; i < pots.length; i++){
-                                if(pots[i].players.some(p => p.member.id === shortStackedPlayer.member.id)) continue outerLoop;
-                            }
-
-                            // reduce the pot and ante for the main pot
-                            pots[0].callAmount -= shortStackedPlayer.bet; 
-                            pots[0].amount -= shortStackedPlayer.bet;
-
-                            //  create side pot
-                            let sidePotAmount = shortStackedPlayer.bet;
-                            let sidePotPlayers = [shortStackedPlayer];
-                            for(const player of pots[0].players){ //remove all bet from the main pot for all players in the main pot
-                                if(player.member.id === shortStackedPlayer.member.id) continue;  
-                                if(player.bet >= shortStackedPlayer.bet){
-                                    pots[0].amount -= shortStackedPlayer.bet;
-                                    player.bet -= shortStackedPlayer.bet;
-                                    sidePotAmount += shortStackedPlayer.bet;
-                                    sidePotPlayers.push(player);
-                                }
-                            }//make the side pot
-                            pots.push({
-                                amount: sidePotAmount,
-                                players: [...sidePotPlayers],
-                            });
-                            pots[0].players = pots[0].players.filter(player => player.member.id !== shortStackedPlayer.member.id); //remove the short stacked player from the main pot
-                            raiseMessage += `${shortStackedPlayer.member.toString()} is all-in and cannot match the bet so side pot ${pots.length-1} was created.\n`;
-                        }
-                    }
                     pots[0].callAmount += betLimit;
                 }
             }
@@ -1308,9 +1194,13 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                     await channel.send(`${name} (NPC) has joined the game with a buy-in of ${buyIn} chips!`);
 
                     await message.edit({
-                        content: `${host.toString()} has started a game of Shadowdale Hold'em with a buy-in of ${buyIn} chips (no scritch bucks required) and is the dungeon master of this game!
-The game will start <t:${nexRoundStartTime}:R> or when the dungen master starts it.
-## Players
+                        content: `## Round over!
+Players ended the last round with:
+${previousPlayers.map(player => `${player.member.toString()} ${player.chips}${player.cashedOut ? ' chips (cashed out)' : player.chips === 0 ? ' chips (busted)' : ' chips'}`).join('\n')}
+### The dungeon master is ${host.toString()}.
+The dungeon master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
+Players can cash out now, new players can join, and the dungeon master can add or cash out NPCs, start the next round, or cancel the game.
+## Players in next game:
 ${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
                         components: [actionRow]
                     });
@@ -1799,6 +1689,14 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: $
                             }
                             await i.deferUpdate();
 
+                            if(currentPlayer.bet + currentPlayer.chips > pots[0].callAmount && currentPlayer.alreadyRaised){
+                                await i.reply({
+                                    content: `You have already raised.`,
+                                    ephemeral: true
+                                });
+                                return;
+                            }
+
                             //calculate the bet
                             currentPlayer.bet += currentPlayer.chips;
                             if(currentPlayer.bet >= pots[0].callAmount) { //the player can afford the main pot
@@ -2037,6 +1935,7 @@ async function getNPCAction(player, pots, betLimit, wildMagic, stage, communityC
     } else if(callAmount === 0){
         return 'call';
     } else if (maxBet >= callAmount) {
+        if(player.chips - callAmount <= 0) return 'allIn';
         return 'call';
     } else {
         return 'fold';
@@ -2280,7 +2179,7 @@ When ever an Ace of Spades is revealed among the community cards, it triggers a 
 3. **Random Reveal**: A random player that has not folded must reveal their hole cards
 10. **The Big Reveal**: All players still in the game must reveal their hole cards
 11. **Instant Showdown**: All community cards are revealed and the game skips straight to the Showdown
-12. **Ultimate Showdown**: All players still in the round must raise to the bet limit and the game skips straight to the Showdown
+12. **Ultimate Showdown**: All players still in the round must raise to the bet limit or go all-in without side pots and the game skips straight to the Showdown
 
 **Winning:**
 - Best 5-card hand wins using any combination of your hole cards and community cards
@@ -2331,7 +2230,8 @@ When ever an Ace of Spades is revealed among the community cards, it triggers a 
         try {
             // For the actual game message
             const message = await interaction.reply({ 
-                content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em with a buy-in of ${buyIn} chips (no scritch bucks required) and is the dungeon master of this game!
+                content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the dungeon master of this game! 
+The a buy-in is ${buyIn} chips (no scritch bucks required).
 The game will start <t:${Math.ceil(startTime/1000)+122}:R> or when the dungeon master starts it.
 ${dmPlay ? `## Players
 ${interaction.member.toString()} (DM)` : ''}`,
@@ -2382,7 +2282,8 @@ ${interaction.member.toString()} (DM)` : ''}`,
                         await channel.send(`${i.user.toString()}${interaction.member.id === i.user.id ? ' (DM)' : ''} has joined the game with a buy-in of ${buyIn} chips!`);
 
                         await message.edit({
-                            content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em with a buy-in of ${buyIn} chips (no scritch bucks required) and is the dungeon master of this game!
+                            content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the dungeon master of this game! 
+The a buy-in is ${buyIn} chips (no scritch bucks required).
 The game will start <t:${Math.ceil(startTime/1000)+122}:R> or when the dungeon master starts it.
 ## Players
 ${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
@@ -2455,7 +2356,8 @@ ${players.map(player => `${player.member.toString()}${interaction.member.id === 
                             await channel.send(`${name} (NPC) has joined the game with a buy-in of ${buyIn} chips!`);
 
                             await message.edit({
-                                content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em with a buy-in of ${buyIn} chips (no scritch bucks required) and is the dungeon master of this game!
+                                content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the dungeon master of this game! 
+The a buy-in is ${buyIn} chips (no scritch bucks required).
 The game will start <t:${Math.ceil(startTime/1000)+122}:R> or when the dungen master starts it.
 ## Players
 ${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
@@ -2499,7 +2401,8 @@ ${players.map(player => `${player.member.toString()}${interaction.member.id === 
                     const bigBlindAmount = smallBlindAmount * 2;
 
                     interaction.editReply({
-                        content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em with a buy-in of ${buyIn} chips (no scritch bucks required) and is the dungeon master of this game!
+                        content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the dungeon master of this game! 
+The a buy-in is ${buyIn} chips (no scritch bucks required).
 ## Players
 ${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
                         components: [],
