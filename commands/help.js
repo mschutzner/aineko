@@ -17,7 +17,7 @@ Usage:
 
 The command list is paginated if there are many commands. Use the Previous/Next buttons to navigate through pages.`,
     async execute(interaction, pool) {
-        const commandName = interaction.options.getString('command');
+        const commandName = interaction.options.getString('command')?.split(' ')[0];
         const commands = interaction.client.commands;
 
         // If a specific command is requested
@@ -85,7 +85,7 @@ The command list is paginated if there are many commands. Use the Previous/Next 
                 const regularOptions = options.filter(opt => opt.hasOwnProperty('type'));
 
                 // Handle subcommands if they exist
-                if (subcommands.length > 0) {
+                if (subcommands.length > 1) {
                     const subcommandsEmbed = {
                         color: 0x0099FF,
                         title: 'Subcommands',

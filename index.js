@@ -107,7 +107,7 @@ client.on("interactionCreate", async interaction => {
 			if(timerDB[0].length > 0){
 				const prevEndTime = timerDB[0][0].end_time.getTime();
 				const timeRemaining = prevEndTime - Date.now();
-				return interaction.reply({content: `You must wait ${formatDuration(timeRemaining)} before you can use this command again.`, ephemeral: true});
+				return interaction.reply({content: `You can use this command again <t:${prevEndTime/1000}:R>.`, ephemeral: true});
 			}
 
 			const endTime = unixToMysqlDatetime(Date.now() + command.cooldown);

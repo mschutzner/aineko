@@ -13,7 +13,7 @@ module.exports = {
 				.setDescription('View stonks graph using hours ago')
 				.addNumberOption(option =>
 					option.setName('start')
-						.setDescription('How many hours ago to start the graph from')
+						.setDescription('How many hours ago to start the graph from (0 for oldest entry)')
 						.setRequired(true))
 				.addNumberOption(option =>
 					option.setName('end')
@@ -25,7 +25,7 @@ module.exports = {
 				.setDescription('View stonks graph using timestamps')
 				.addNumberOption(option =>
 					option.setName('start')
-						.setDescription('Unix timestamp to start the graph from')
+						.setDescription('Unix timestamp to start the graph from (0 for oldest entry)')
 						.setRequired(true))
 				.addNumberOption(option =>
 					option.setName('end')
@@ -36,6 +36,22 @@ module.exports = {
 		try {
 			const member = interaction.member;
 			const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [member.id]);
+
+			if(userDB[0].length == 0){
+				return await interaction.reply({ 
+					content: 'You weren\'t found in the database.',
+					ephemeral: true 
+				});
+			}
+
+			const userScritchDB = await conn.query('SELECT * FROM `user_scritch` WHERE `user_id` = ?;', [member.id]);
+
+			if(userScritchDB[0].length == 0){
+				return await interaction.reply({ 
+					content: 'You weren\'t found in the database.',
+					ephemeral: true 
+				});
+			}
 			
 			const canvas = createCanvas(720, 540);
 			const ctx = canvas.getContext('2d');
@@ -67,6 +83,11 @@ module.exports = {
 						ephemeral: true 
 					});
 				}
+
+				// If startHours is 0, get hours since oldest entry
+				if (startHours === 0) {
+					startHours = (curTime - userScritchDB[0][0].timestamp.getTime()) / 3600000;
+				}
 				
 				if (endHours >= startHours) {
 					return await interaction.reply({ 
@@ -79,8 +100,8 @@ module.exports = {
 				endTime = curTime - (endHours * 3600000);
 				timeScale = (startHours - endHours) * 3600000;
 			} else {
-				const startTimestamp = interaction.options.getNumber('start');
-				const endTimestamp = interaction.options.getNumber('end');
+				let startTimestamp = interaction.options.getNumber('start');
+				let endTimestamp = interaction.options.getNumber('end');
 				
 				// Validate timestamps
 				if (startTimestamp < 0) {
@@ -88,6 +109,10 @@ module.exports = {
 						content: 'Start timestamp cannot be negative. Please provide a valid Unix timestamp.',
 						ephemeral: true 
 					});
+				}
+				// If startHours is 0, get hours since oldest entry
+				if (startTimestamp === 0) {
+					startTimestamp = userScritchDB[0][0].timestamp.getTime() / 1000;
 				}
 				
 				if (endTimestamp && endTimestamp < 0) {
@@ -136,8 +161,6 @@ module.exports = {
 				const timeLabel = `t-${time.toFixed(2)}`;
 				ctx.fillText(timeLabel, 5+i*100, 500);
 			}
-			
-			const userScritchDB = await conn.query('SELECT * FROM `user_scritch` WHERE `user_id` = ?;', [member.id]);
 			
 			ctx.beginPath();
 			ctx.moveTo(30, 270);

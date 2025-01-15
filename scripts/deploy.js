@@ -31,21 +31,7 @@ function getAllCommandNames() {
         .filter(name => name !== null); // Remove null entries
 }
 
-// If commandName is "help", we'll modify the command to include choices
-let command;
-if (commandName === "help") {
-    command = require(`../commands/${commandName}.js`);
-    const choices = getAllCommandNames()
-        .map(name => ({
-            name: name,
-            value: name
-        }));
-    // Clear existing choices and add new ones
-    command.data.options[0].setChoices(...choices);
-} else {
-    command = require(`../commands/${commandName}.js`);
-}
-
+const command = require(`../commands/${commandName}.js`);
 if(!command) throw('Command not found.');
 
 client.once("ready", async () => {

@@ -14,6 +14,7 @@ module.exports = {
                 .setDescription('What do you wish for?')
                 .setRequired(true)),
     catId: 10, //Djinn
+	cooldown: 3600000,
     async execute(interaction) {
         await interaction.deferReply();
 

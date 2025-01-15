@@ -80,8 +80,8 @@ const wildMagicTable = [
     '### Modron Madness (8): A lawful nuertral NPC modron buys in at the start of the next round.',
     '### Random Reveal (9): A random player that has not folded must reveal their hole cards.',
     '### The Big Reveal (10): All players still in the game must reveal their hole cards.',
-    '### Instant Showdown (11): All community cards are revealed and the game skips straight to the Showdown.',
-    '### Ultimate Showdown (12): All players still in the round must raise to the bet limit or go all-in without side pots and the game skips straight to the Showdown.'
+    '### Instant Showdown (11): The game skips straight to the Showdown.',
+    '### Ultimate Showdown (12): The call ammount is raised by the bet limit. All players still in the game automatically call or go all-in and the game skips straight to the Showdown.'
 ]
 
 const modronNames = [
@@ -230,25 +230,65 @@ ${player.hand.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`);
             break;
         case 12: //ultimate showdown
             //raise players to the bet limit
-            let raiseMessage = '';
             const betLimit = stage < 2 ? startingCallAmount * 2 : startingCallAmount * 4;
+            pots[0].callAmount += betLimit;
+            let raiseMessage = `The call amount has been raised to ${pots[0].callAmount} chips.\n`;
             for(const currentPlayer of players){
-                let newCallAmount = pots[0].callAmount + betLimit;
                 if(currentPlayer.folded || currentPlayer.allIn) continue;
-                if(currentPlayer.bet + currentPlayer.chips <= newCallAmount) {
+                if(currentPlayer.bet + currentPlayer.chips <= pots[0].callAmount) {
                     // all in
+                    let startingBet = currentPlayer.bet;
                     currentPlayer.bet += currentPlayer.chips;
-                    let difference = currentPlayer.bet - pots[0].callAmount;
                     pots[0].amount += currentPlayer.chips;
                     raiseMessage += `${currentPlayer.member.toString()} has gone all-in for ${currentPlayer.chips} chips.\n`;
+                    //make the player all in
+                    currentPlayer.chips = 0;
+                    currentPlayer.allIn = true;
                 } else {
-                    //raise
-                    let difference = newCallAmount - currentPlayer.bet;
+                    //call
+                    let difference = pots[0].callAmount - currentPlayer.bet;
                     currentPlayer.chips -= difference;
                     currentPlayer.bet += difference;
                     pots[0].amount += difference;
-                    raiseMessage += `${currentPlayer.member.toString()} raised by ${betLimit} chips and has ${currentPlayer.chips} chips left.\n`
-                    pots[0].callAmount += betLimit;
+                    raiseMessage += `${currentPlayer.member.toString()} called and has ${currentPlayer.chips} chips left.\n`;
+                }
+            }
+            // check for short stacked players
+            const shortStackedPlayers = [];
+            for(const player of pots[0].players){
+                if(player.allIn && player.bet < pots[0].callAmount){ // Check current bet against ante
+                    shortStackedPlayers.push(player);
+                }
+            }
+            if(shortStackedPlayers.length > 0){ //make side pots for short stacked players
+                outerLoop:
+                for(const shortStackedPlayer of shortStackedPlayers){
+                    for(let i = 1; i < pots.length; i++){
+                        if(pots[i].players.some(p => p.member.id === shortStackedPlayer.member.id)) continue outerLoop;
+                    }
+
+                    // reduce the pot and ante for the main pot
+                    pots[0].callAmount -= shortStackedPlayer.bet; 
+                    pots[0].amount -= shortStackedPlayer.bet;
+
+                    //  create side pot
+                    let sidePotAmount = shortStackedPlayer.bet;
+                    let sidePotPlayers = [shortStackedPlayer];
+                    for(const player of pots[0].players){ //remove all bet from the main pot for all players in the main pot
+                        if(player.member.id === shortStackedPlayer.member.id) continue;  
+                        if(player.bet >= shortStackedPlayer.bet){
+                            pots[0].amount -= shortStackedPlayer.bet;
+                            player.bet -= shortStackedPlayer.bet;
+                            sidePotAmount += shortStackedPlayer.bet;
+                            sidePotPlayers.push(player);
+                        }
+                    }//make the side pot
+                    pots.push({
+                        amount: sidePotAmount,
+                        players: [...sidePotPlayers],
+                    });
+                    pots[0].players = pots[0].players.filter(player => player.member.id !== shortStackedPlayer.member.id); //remove the short stacked player from the main pot
+                    raiseMessage += `${shortStackedPlayer.member.toString()} is all-in and cannot match the bet so side pot ${pots.length-1} was created.\n`;
                 }
             }
             await channel.send(`${raiseMessage}
@@ -1083,11 +1123,8 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
         time: 120000 // 60 seconds for the collector
     });
 
-    let cashoutModalIndex = 0;
     const highestId = players.reduce((max, player) => player.member.id > max ? player.member.id : max, 0);
     let npcCount = highestId + 1;
-
-    let npcModalIndex = 0;
 
     collector.on('collect', async i => {
         try {
@@ -1136,7 +1173,7 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
 
                 // Create the modal
                 const modal = new ModalBuilder()
-                    .setCustomId(`npcModal-${npcModalIndex}`)
+                    .setCustomId(`npcModal-${i.id}`)
                     .setTitle('Add NPC');
 
                 let npcName;
@@ -1164,10 +1201,8 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                 try {
                     const modalResponse = await i.awaitModalSubmit({
                         time: 60000,
-                        filter: i => i.customId === `npcModal-${npcModalIndex}`
+                        filter: j => j.customId === `npcModal-${i.id}`
                     }).catch(() => null);
-
-                    npcModalIndex++;
                     
                     if (!modalResponse) return;
 
@@ -1212,7 +1247,7 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                 if(i.user.id === host.id && players.some(p => p.npc === true)){
                     // Create the modal
                     const modal = new ModalBuilder()
-                        .setCustomId(`cashoutModal-${cashoutModalIndex}`)
+                        .setCustomId(`cashoutModal-${i.id}`)
                         .setTitle('Add NPC');
 
                     // Create the text input component
@@ -1235,10 +1270,8 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                     try {
                         const modalResponse = await i.awaitModalSubmit({
                             time: 60000,
-                            filter: i => i.customId === `cashoutModal-${cashoutModalIndex}`
+                            filter: j => j.customId === `cashoutModal-${i.id}`
                         }).catch(() => null);
-
-                        cashoutModalIndex++;
                         
                         if (!modalResponse) return;
 
@@ -1259,6 +1292,24 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                         }
                         await modalResponse.deferUpdate();
                         
+                        await channel.send(`${player.member.toString()} has cashed out ${players.find(p => p.member.id === player.member.id).chips} chips.`);
+
+                        if(previousPlayers.find(p => p.member.id === player.member.id)){
+                            previousPlayers.find(p => p.member.id === player.member.id).cashedOut = true;
+                        }
+                        players = players.filter(p => p.member.id !== player.member.id); // Remove player from players array
+
+                        await message.edit({
+                            content: `## Round over!
+Players ended the last round with:
+${previousPlayers.map(p => `${p.member.toString()} ${p.chips}${p.cashedOut ? ' chips (cashed out)' : p.chips === 0 ? ' chips (busted)' : ' chips'}`).join('\n')}
+### The dungeon master is ${host.toString()}.
+The dungeon master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
+Players can cash out now, new players can join, and the dungeon master can add or cash out NPCs, start the next round, or cancel the game.
+## Players in next game:
+${players.map(p => `${p.member.toString()}${host.id === p.member.id ? ' (DM)' : ''}`).join('\n')}`,
+                            components: [actionRow]
+                        });
                     } catch (error) {
                         console.error(error);
                     }
@@ -1269,25 +1320,25 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                         await i.reply({ content: "You are not in the game.", ephemeral: true });
                         return;
                     }
-                } 
-
-                await channel.send(`${player.member.toString()} has cashed out ${players.find(p => p.member.id === p.member.id).chips} chips.`);
-
-                previousPlayers.find(p => p.member.id === player.member.id).cashedOut = true;
-                players = players.filter(p => p.member.id !== player.member.id); // Remove player from players array
-
-                await message.edit({
-                    content: `## Round over!
+                    await channel.send(`${player.member.toString()} has cashed out ${players.find(p => p.member.id === player.member.id).chips} chips.`);
+    
+                    if(previousPlayers.find(p => p.member.id === player.member.id)){
+                        previousPlayers.find(p => p.member.id === player.member.id).cashedOut = true;
+                    }
+                    players = players.filter(p => p.member.id !== player.member.id); // Remove player from players array
+    
+                    await message.edit({
+                        content: `## Round over!
 Players ended the last round with:
-${previousPlayers.map(player => `${player.member.toString()} ${player.chips}${player.cashedOut ? ' chips (cashed out)' : player.chips === 0 ? ' chips (busted)' : ' chips'}`).join('\n')}
+${previousPlayers.map(p => `${p.member.toString()} ${p.chips}${p.cashedOut ? ' chips (cashed out)' : p.chips === 0 ? ' chips (busted)' : ' chips'}`).join('\n')}
 ### The dungeon master is ${host.toString()}.
 The dungeon master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
 Players can cash out now, new players can join, and the dungeon master can add or cash out NPCs, start the next round, or cancel the game.
 ## Players in next game:
-${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
-                    components: [actionRow]
-                });
-
+${players.map(p => `${p.member.toString()}${host.id === p.member.id ? ' (DM)' : ''}`).join('\n')}`,
+                        components: [actionRow]
+                    });
+                } 
             } else if (i.customId === 'start' || i.customId === 'cancel') {
                 // Only game host can start/cancel
                 if (channel.guild.id !== '825883828798881822' && i.user.id !== host.id) {
@@ -1495,8 +1546,6 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: $
                 time: 60000
             });
 
-            let raiseModalIndex = 0;
-
             collector.on('collect', async i => {
                 try {
                     if (channel.guild.id !== '825883828798881822' && i.user.id !== currentPlayer.member.id) {
@@ -1524,7 +1573,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: $
 
                         // Create the modal
                         const modal = new ModalBuilder()
-                            .setCustomId(`raiseModal-${raiseModalIndex}`)
+                            .setCustomId(`raiseModal-${i.id}`)
                             .setTitle('Raise Amount');
 
                         // Create the text input component
@@ -1548,11 +1597,9 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: $
                         try {
                             const modalResponse = await i.awaitModalSubmit({
                                 time: 60000,
-                                filter: i => i.customId === `raiseModal-${raiseModalIndex}`
+                                filter: j => j.customId === `raiseModal-${i.id}`
                             }).catch(() => null);
 
-                            raiseModalIndex++;
-                            
                             if (!modalResponse) return;
 
                             const raiseAmount = parseInt(modalResponse.fields.getTextInputValue('raiseAmount'));
@@ -2178,8 +2225,8 @@ When ever an Ace of Spades is revealed among the community cards, it triggers a 
 8. **Modron Madness**: A lawful nuertral NPC modron buys in at the start of the next round
 3. **Random Reveal**: A random player that has not folded must reveal their hole cards
 10. **The Big Reveal**: All players still in the game must reveal their hole cards
-11. **Instant Showdown**: All community cards are revealed and the game skips straight to the Showdown
-12. **Ultimate Showdown**: All players still in the round must raise to the bet limit or go all-in without side pots and the game skips straight to the Showdown
+11. **Instant Showdown**: The game skips straight to the Showdown
+12. **Ultimate Showdown**: The call ammount is raised by the bet limit. All players still in the game automatically call or go all-in and the game skips straight to the Showdown
 
 **Winning:**
 - Best 5-card hand wins using any combination of your hole cards and community cards
@@ -2253,8 +2300,6 @@ ${interaction.member.toString()} (DM)` : ''}`,
                 time: 120000 
             });
 
-            let npcModalIndex = 0;
-
             collector.on('collect', async i => {
                 try {
                     if (i.customId === 'join') {
@@ -2297,7 +2342,7 @@ ${players.map(player => `${player.member.toString()}${interaction.member.id === 
 
                         // Create the modal
                         const modal = new ModalBuilder()
-                            .setCustomId(`npcModal-${npcModalIndex}`)
+                            .setCustomId(`npcModal-${i.id}`)
                             .setTitle('Add NPC');
 
                         let npcName;
@@ -2325,11 +2370,9 @@ ${players.map(player => `${player.member.toString()}${interaction.member.id === 
                         try {
                             const modalResponse = await i.awaitModalSubmit({
                                 time: 60000,
-                                filter: i => i.customId === `npcModal-${npcModalIndex}`
+                                filter: j => j.customId === `npcModal-${i.id}`
                             }).catch(() => null);
 
-                            npcModalIndex++;
-                            
                             if (!modalResponse) return;
 
                             const name = modalResponse.fields.getTextInputValue('nameInput').trim();
@@ -2382,7 +2425,7 @@ ${players.map(player => `${player.member.toString()}${interaction.member.id === 
                             await i.deferUpdate();
 
                             collector.stop('started');
-                        } else {o
+                        } else {
                             await i.deferUpdate();
                             
                             collector.stop('cancelled');

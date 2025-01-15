@@ -965,8 +965,6 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                 time: 60000
             });
 
-            let raiseIndex = 0;
-
             collector.on('collect', async i => {
                 try {
                     if (channel.guild.id !== '825883828798881822' && i.user.id !== currentPlayer.member.id) {
@@ -986,7 +984,7 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
 
                         // Create the modal
                         const modal = new ModalBuilder()
-                            .setCustomId(`raiseModal-${raiseIndex}`)
+                            .setCustomId(`raiseModal-${i.id}`)
                             .setTitle('Raise Amount');
 
                         // Create the text input component
@@ -1010,10 +1008,8 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                         try {
                             const modalResponse = await i.awaitModalSubmit({
                                 time: 60000,
-                                filter: i => i.customId === `raiseModal-${raiseIndex}`
+                                filter: j => j.customId === `raiseModal-${i.id}`
                             }).catch(() => null);
-
-                            raiseIndex++;
                             
                             if (!modalResponse) return;
                             await modalResponse.deferUpdate();

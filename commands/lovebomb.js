@@ -4,7 +4,7 @@ module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('lovebomb')
 		.setDescription('Everyone who has been recently active gets 100 scritch bucks!'),
-	cooldown: 3600000,
+	cooldown: 36000000,
 	catId: 7, //Lucky
 	async execute(interaction, pool) {
 		const member = interaction.member;
