@@ -480,6 +480,15 @@ ${interaction.member.toString()} ฅ${wager}`,
 
 							const joinWager = parseInt(modalSubmit.fields.getTextInputValue('wager_input'));
 
+							// Check again if collector is still active
+							if (collector.ended) {
+								await modalResponse.reply({ 
+									content: "It's too late to join.", 
+									ephemeral: true 
+								});
+								return;
+							}
+
 							if (isNaN(joinWager) || joinWager <= 0) {
 								await modalSubmit.reply({ content: "Please enter a valid positive number.", ephemeral: true });
 								return;
@@ -576,7 +585,7 @@ ${players.map(p => `${p.toString()} ฅ${p.wager}`).join('\n')}`,
 
 					for await (const player of players) {
 						player.hands[0].hand.push(deck.splice(0, 1)[0]);
-						// player.hands[0].hand.push([1,1])
+						// player.hands[0].hand.push([1,1]);
 						player.hands[0].value = addCards(player.hands[0].hand);
 					}
 					dealerHand.push(deck.splice(0, 1)[0]);
@@ -672,13 +681,15 @@ ${formatCards(dealerHand, emojis)}
 
 					for (const player of players) {
 						if(player.hands.length > 1){
-							await channel.send(`${player.toString()}'s Hands:
-${player.hands.map(h => `Hand ${player.hands.indexOf(h)+1}: (${h.value})${h.surrendered ? ' (surrendered)' : h.busted ? ' (busted)' : h.value == dealerValue ? ' (pushed)' : ''}
-${formatCards(h.hand, emojis)}`).join('\n')}`);
+							await channel.send(`${player.toString()}'s Hands:`);
+							for(const hand of player.hands){
+								await channel.send(`Hand ${player.hands.indexOf(hand)+1}: (${hand.value})${hand.surrendered ? ' (surrendered)' : hand.busted ? ' (busted)' : hand.value == dealerValue ? ' (pushed)' : ''}
+${formatCards(hand.hand, emojis)}`);
+							}
 						} else {
-							const h = player.hands[0];
-							await channel.send(`${player.toString()}'s Hand: (${h.value})${h.surrendered ? ' (surrendered)' : h.busted ? ' (busted)' : h.value == dealerValue ? ' (pushed)' : ''}
-${formatCards(h.hand, emojis)}`);
+							const hand = player.hands[0];
+							await channel.send(`${player.toString()}'s Hand: (${hand.value})${hand.surrendered ? ' (surrendered)' : hand.busted ? ' (busted)' : hand.value == dealerValue ? ' (pushed)' : ''}
+${formatCards(hand.hand, emojis)}`);
 						}
 					}
 
@@ -693,7 +704,7 @@ ${formatCards(h.hand, emojis)}`);
 								continue;
 							}
 							if(hand.surrendered){
-								win -= roundUp ? Math.floor(hand.wager/2) : Math.ceil(hand.wager/2);
+								win -= roundUp ? Math.ceil(hand.wager/2) : Math.floor(hand.wager/2);
 								roundUp = !roundUp;
 							} else if(addCards(dealerHand) > 21 || hand.value > addCards(dealerHand)){
 								win += (hand.value == 21) ? Math.ceil(hand.wager*3/2) : hand.wager;
@@ -712,9 +723,8 @@ ${formatCards(h.hand, emojis)}`);
 								[player.id, userDB[0][0].scritch_bucks, player.user.username]);
 						} else if(win === 0){
 							resultMsg += `## ${player.toString()} broke even.\n`;
-							const newScritchBucks = userDB[0][0].scritch_bucks + player.wager * player.hands.length;
 							await conn.query('UPDATE `user` SET `scritch_bucks` = ? WHERE `user_id` = ?;', 
-								[newScritchBucks, player.id]);
+								[userDB[0][0].scritch_bucks, player.id]);
 						} else if(win > 0){
 							resultMsg += `## ${player.toString()} won ฅ${win}.\n`;
 							const newScritchBucks = userDB[0][0].scritch_bucks + player.wager * player.hands.length + win;

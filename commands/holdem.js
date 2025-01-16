@@ -1000,8 +1000,6 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                         const firstActionRow = new ActionRowBuilder().addComponents(raiseInput);
                         modal.addComponents(firstActionRow);
 
-                        collector.resetTimer();
-
                         // Show the modal
                         await i.showModal(modal);
 
@@ -1015,6 +1013,15 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                             await modalResponse.deferUpdate();
 
                             const raiseAmount = parseInt(modalResponse.fields.getTextInputValue('raiseAmount'));
+
+                            // Check again if collector is still active
+                            if (collector.ended) {
+                                await modalResponse.reply({ 
+                                    content: "It's too late to raise.", 
+                                    ephemeral: true 
+                                });
+                                return;
+                            }
 
                             if (isNaN(raiseAmount) || raiseAmount <= 0) {
                                 await modalResponse.reply({ content: 'Please enter a valid positive number.', ephemeral: true });
@@ -1357,7 +1364,7 @@ ${interaction.member.toString()} (host)`,
             });
 
             // Add game to database
-            await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, "holdem");', [channel.id]);
+            await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, "texas holdem");', [channel.id]);
 
             // Take buy-in from initiator
             await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 

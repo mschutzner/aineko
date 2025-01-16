@@ -1206,6 +1206,15 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                     
                     if (!modalResponse) return;
 
+                    // Check again if collector is still active
+                    if (collector.ended) {
+                        await modalResponse.reply({ 
+                            content: "It's too late to add an NPC.", 
+                            ephemeral: true 
+                        });
+                        return;
+                    }
+
                     const name = modalResponse.fields.getTextInputValue('nameInput').trim();
 
                     if(players.some(p => p.npc && p.member.name.toLowerCase() === name.toLowerCase())){
@@ -1274,6 +1283,15 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                         }).catch(() => null);
                         
                         if (!modalResponse) return;
+
+                        // Check again if collector is still active
+                        if (collector.ended) {
+                            await modalResponse.reply({ 
+                                content: "It's too late to cash out.", 
+                                ephemeral: true 
+                            });
+                            return;
+                        }
 
                         const name = modalResponse.fields.getTextInputValue('nameInput').toLowerCase().trim();
 
@@ -1589,8 +1607,6 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: $
                         const firstActionRow = new ActionRowBuilder().addComponents(raiseInput);
                         modal.addComponents(firstActionRow);
 
-                        collector.resetTimer();
-
                         // Show the modal
                         await i.showModal(modal);
 
@@ -1603,6 +1619,15 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: $
                             if (!modalResponse) return;
 
                             const raiseAmount = parseInt(modalResponse.fields.getTextInputValue('raiseAmount'));
+
+                            // Check again if collector is still active
+                            if (collector.ended) {
+                                await modalResponse.reply({ 
+                                    content: "It's too late to raise.", 
+                                    ephemeral: true 
+                                });
+                                return;
+                            }
 
                             if (isNaN(raiseAmount) || raiseAmount <= 0) {
                                 await modalResponse.reply({ content: 'Please enter a valid positive number.', ephemeral: true });
@@ -1891,7 +1916,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: $
 async function getNPCAction(player, pots, betLimit, wildMagic, stage, communityCards) {
     const NUM_SIMULATIONS = communityCards[4][0] === 4 ? 2500 : 10000;
     const RAISE_THRESHOLD = 0.625;
-    const RANDOMNESS_FACTOR = 0.1;
+    const RANDOMNESS_FACTOR = 0.141;
     
     // Calculate current pot odds
     const callAmount = pots[0].callAmount - player.bet;
@@ -1959,7 +1984,7 @@ async function getNPCAction(player, pots, betLimit, wildMagic, stage, communityC
     
     // Adjust thresholds based on number of opponents
     const randomness = Math.random() * RANDOMNESS_FACTOR * 2 - RANDOMNESS_FACTOR;
-    const adjustedRaiseThreshold = RAISE_THRESHOLD / Math.sqrt(numOpponents) + randomness;
+    const adjustedRaiseThreshold = RAISE_THRESHOLD / Math.sqrt(numOpponents) + randomness / Math.sqrt(numOpponents);
     
     // Calculate maximum bet based on win rate
     const maxBet = Math.floor(winRate * player.chips);
@@ -2286,6 +2311,9 @@ ${interaction.member.toString()} (DM)` : ''}`,
                 fetchReply: true
             });
 
+            // Add game to database
+            await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, "shadowdale holdem");', [channel.id]);
+
             // Create list of players with their chips
             let players = dmPlay ? [{
                 member: interaction.member,
@@ -2374,6 +2402,15 @@ ${players.map(player => `${player.member.toString()}${interaction.member.id === 
                             }).catch(() => null);
 
                             if (!modalResponse) return;
+
+                            // Check again if collector is still active
+                            if (collector.ended) {
+                                await modalResponse.reply({ 
+                                    content: "It's too late to add an NPC.", 
+                                    ephemeral: true 
+                                });
+                                return;
+                            }
 
                             const name = modalResponse.fields.getTextInputValue('nameInput').trim();
 

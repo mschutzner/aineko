@@ -196,7 +196,6 @@ async function evaluateExpression(interaction, pool, expression, firstAdvOrDisad
                                 dice.split(/\s*,\s*/).length >= 2)); // and there must be at least 2
         if (isAdvOrDisadv && firstAdvOrDisadv) {
             firstAdvOrDisadv = false;
-            console.log(isAdvOrDisadv);
             // Check for two natural 20s
             if (result.rolls.every(roll => roll === 20)) {
                 const conn = await pool.getConnection();

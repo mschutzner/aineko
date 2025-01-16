@@ -75,7 +75,7 @@ client.on("interactionCreate", async interaction => {
 			}); 
 			
             const gameDB = await conn.query('SELECT * FROM `game` WHERE `channel_id` = ?;', [channel.id]);
-            if(guild.id !== '825883828798881822' && gameDB[0].length){
+            if(gameDB[0].length){
 				const timeElapsed = Date.now() - gameDB[0][0].start_time.getTime();
 				if(timeElapsed > 300000){
 					await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);

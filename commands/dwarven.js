@@ -37,7 +37,7 @@ module.exports = {
     catId: 11, // Urist
     game: true,
     help: `## 🎲 Dwarven Dice
-A game of chance where players roll d6 dice (bones) and try to get the highest total without rolling any 1s.
+A game of chance where players and the houseroll d6 dice (bones) and try to get the highest total without rolling any 1s.
 ### How to Play
 1. The host starts a game with \`/dwarven\` setting:
    - \`buyin\` - Amount of scritch bucks to enter
@@ -52,6 +52,7 @@ A game of chance where players roll d6 dice (bones) and try to get the highest t
    - Player(s) with the highest total (who didn't bust) win
    - The pot is split evenly between winners
    - If there's an odd amount to split, the last winner gets the extra scritch buck
+   - The house always wins if everyone busts
 ### Example
 > Player 1 rolls 3 bones: 6, 4, 5 = 15
 > Player 2 rolls 2 bones: 6, 1 = BUST
@@ -86,6 +87,9 @@ Player 1 wins with a total of 15!
                 });
             }
 
+            // Add game to database
+            await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, "dwarven dice");', [channel.id]);
+
             // Create buttons
             const joinButton = new ButtonBuilder()
                 .setCustomId('join')
@@ -119,10 +123,6 @@ Player 1 wins with a total of 15!
             // Take Buy-In from initiator
             await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
                 [buyin, interaction.member.id]);
-            
-            // Record transaction in user_scritch
-            await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                [interaction.member.id, userDB[0][0].scritch_bucks - buyin, interaction.member.user.username]);
 
             // Collection to store players
             const players = new Map();
@@ -263,10 +263,6 @@ Player 1 wins with a total of 15!
                         // Take Buy-In from player
                         await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
                             [buyin, i.member.id]);
-                        
-                        // Record transaction in user_scritch
-                        await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                            [i.member.id, joinUserDB[0][0].scritch_bucks - buyin, i.member.user.username]);
 
                         players.set(i.member.id, {
                             member: i.member,
@@ -325,6 +321,7 @@ Player 1 wins with a total of 15!
 
                     // Refund all players
                     for (const [userId, participant] of players) {
+                        if(userId === 'house') continue;
                         const refundUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [userId]);
                         const newAmount = refundUserDB[0][0].scritch_bucks + buyin;
                         const highestScritchBucks = Math.max(newAmount, refundUserDB[0][0].scritch_bucks_highscore);
@@ -381,58 +378,56 @@ Player 1 wins with a total of 15!
                     await channel.send(`${r.member.toString()}:\n${r.rollEmojis}\n**Total:** ${r.total}${r.hasOne ? ' (busted)' : ''}`);
                 }
 
+                let roundUp = false;
                 if (winners.length > 0) {
-                    const winningsEach = Math.floor(pot / winners.length);
-                    const remainder = pot - (winningsEach * winners.length);
-                    
-                    await channel.send(`## Winner${winners.length > 1 ? 's' : ''}:\n${winners.map((w, i) => {
-                        // Last winner gets the remainder
-                        const bonus = (i === winners.length - 1) ? remainder : 0;
+                    await channel.send(`${winners.map((w, i) => {
                         // Don't show winnings for dealer, but mention house contribution
-                        if (w.userId === 'house') {
-                            return `${w.member.toString()} (House wins ฅ${winningsEach + bonus}!)`;
-                        }
-                        return `${w.member.toString()} ฅ${winningsEach + bonus}`;
+                        if (w.userId === 'house') return `## The house won ฅ${roundUp ? Math.floor(pot / winners.length) : Math.ceil(pot / winners.length)}.`;
+                        return `## ${w.member.toString()} won ฅ${roundUp ? Math.floor(pot / winners.length) : Math.ceil(pot / winners.length)}.`;
+                        roundUp = !roundUp;
                     }).join('\n')}`);
 
-                    // Distribute winnings only to non-dealer winners
-                    for (let i = 0; i < winners.length; i++) {
-                        const winner = winners[i];
-                        if (winner.userId === 'house') continue; // Skip house
 
-                        const bonus = (i === winners.length - 1) ? remainder : 0;
-                        const winnings = winningsEach + bonus;
+                    // Distribute winns
+                    roundUp = false;
+                    for (const [userId, player] of players) {
+                        if(winners.some(w => w.userId === userId)) {
+                            if (userId === 'house'){
+                                roundUp = !roundUp;
+                            } else {
+                                const winnerDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [userId]);
+                                const newAmount = roundUp ? winnerDB[0][0].scritch_bucks + Math.ceil(pot / winners.length) : winnerDB[0][0].scritch_bucks + Math.floor(pot / winners.length);
+                                const highestScritchBucks = Math.max(newAmount, winnerDB[0][0].scritch_bucks_highscore);
+                                
+                                roundUp = !roundUp;
 
-                        const winnerDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [winner.userId]);
-                        const newAmount = winnerDB[0][0].scritch_bucks + winnings;
-                        const highestScritchBucks = Math.max(newAmount, winnerDB[0][0].scritch_bucks_highscore);
-                        
-                        // Update scritch_bucks and record transaction
-                        await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-                            [newAmount, highestScritchBucks, winner.userId]);
-                        await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                            [winner.userId, newAmount, winner.member.user.username]);
+                                // Update scritch_bucks and record transaction
+                                await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+                                    [newAmount, highestScritchBucks, userId]);
+                                await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
+                                    [userId, newAmount, player.member.user.username]);
+                            }
+                        } else {
+                            if(userId === 'house') continue;
+                            const loserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [userId]);
+                            await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
+                                [userId, loserDB[0][0].scritch_bucks, player.member.user.username]);
+                        }
                     }
                 } else {
-                    await channel.send("## No winners! Everyone rolled a 1, so everyone gets their Buy-In back.");
+                    await channel.send(`## Everyone rolled a one so the house wins ฅ${pot}.`);
 
                     // Refund all players except dealer
                     for (const [userId, player] of players) {
                         if (userId === 'house') continue; // Skip house
-                        
-                        const refundUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [userId]);
-                        const newAmount = refundUserDB[0][0].scritch_bucks + buyin;
-                        const highestScritchBucks = Math.max(newAmount, refundUserDB[0][0].scritch_bucks_highscore);
-                        
-                        // Update scritch_bucks and record transaction
-                        await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-                            [newAmount, highestScritchBucks, userId]);
+                        const loserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', [userId]);
                         await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
-                            [userId, newAmount, player.member.user.username]);
+                            [userId, loserDB[0][0].scritch_bucks, player.member.user.username]);
                     }
                 }
 
                 // Update the final game message
+                roundUp = false;
                 await message.edit({
                     content: `🎲 **${interaction.member.toString()}**'s game of Dwarven Dice has ended!\n` +
                         `## Players\n` +
@@ -442,30 +437,34 @@ Player 1 wins with a total of 15!
                             if (winners.length > 0) {
                                 if (result.hasOne) status = ' (busted)';
                                 else if (winners.some(w => w.userId === result.userId)) {
-                                    const isLastWinner = winners[winners.length - 1].userId === result.userId;
-                                    const winningsEach = Math.floor(pot / winners.length);
-                                    const remainder = pot - (winningsEach * winners.length);
-                                    const bonus = isLastWinner ? remainder : 0;
+                                    const win = roundUp ? Math.ceil(pot / winners.length) : Math.floor(pot / winners.length);
                                     if (result.userId === 'house') {
-                                        status = ` (House wins ฅ${winningsEach + bonus}!)`;
+                                        status = ` (House wins ฅ${win})`;
                                     } else {
-                                        status = ` (Won ฅ${winningsEach + bonus})`;
+                                        status = ` (Won ฅ${win})`;
                                     }
+                                    roundUp = !roundUp;
                                 }
                             } else {
-                                status = result.userId === 'house' ? '' : ` (Refunded ฅ${buyin})`;
+                                status = result.userId === 'house' ? ` (House wins ฅ${pot})` : ' (busted)';
                             }
                             // Always show dealer first
                             return `${p.member.toString()} ${p.bones} bones${status}`;
                         }).sort((a, b) => a.includes('House') ? -1 : b.includes('House') ? 1 : 0).join('\n')}`,
                     components: []
                 });
+
+                await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id])
+                    .catch(console.error);
             });
         } catch(err) {
             console.error('Dwarven dice command error:', err);
             await interaction.editReply({ 
                 content: "An error occurred while running the game. Please try again."
             }).catch(console.error);
+
+            await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id])
+                .catch(console.error);
             throw err;
         } finally {
             conn.release();
