@@ -216,6 +216,8 @@ ${formatCards(currentHand.hand, emojis)}`,
                                 // Take additional wager
                                 await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
                                     [currentHand.wager, player.id]);
+
+								player.wager += currentHand.wager;
                                 
                                 // Create new hand
                                 const newHand = {
@@ -269,6 +271,7 @@ ${formatCards(currentHand.hand, emojis)}`,
                             } else if (i.customId === 'double_down') {
                                 await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
                                     [currentHand.wager, player.id]);
+								player.wager += currentHand.wager;
                                 currentHand.wager *= 2;
 
                                 currentHand.hand.push(deck.splice(0, 1)[0]);
@@ -560,7 +563,7 @@ ${players.map(p => `**${p.toString()}** ฅ${p.wager}`).join('\n')}`,
 						for await (const player of players) {
 							const refundUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', 
 								[player.id]);
-							const newAmount = refundUserDB[0][0].scritch_bucks + player.hands.reduce((sum, hand) => sum + hand.wager, 0);
+							const newAmount = refundUserDB[0][0].scritch_bucks + player.wager;
 							const highestScritchBucks = Math.max(newAmount, refundUserDB[0][0].scritch_bucks_highscore);
 							await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
 								[newAmount, highestScritchBucks, player.id]);
@@ -667,6 +670,7 @@ This option expires <t:${Math.ceil(insuranceTime/1000)+22}:R>`,
 									await channel.send(`${player.toString()} has opted for insurance and put forward ฅ${player.insurance}.`);
 									await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
 										[player.insurance, player.id]);
+									player.wager += player.insurance;
 								}
 							} catch (err) {
 								console.error('Insurance error:', err);
@@ -707,42 +711,36 @@ ${formatCards(hand.hand, emojis)}`);
 					// Show individual results
 					for (const player of players){
 						let win = 0;
+						if(player.insurance && addCards(dealerHand) === 21) {
+							win += player.insurance * 2;
+						}
 						for (const hand of player.hands){
-							if(hand.busted) {
-								win -= hand.wager;
-								continue;
-							}
+							if(hand.busted) continue;
 							if(hand.surrendered){
-								win -= roundUp ? Math.ceil(hand.wager/2) : Math.floor(hand.wager/2);
+								win += roundUp ? Math.ceil(hand.wager/2) : Math.floor(hand.wager/2);
 								roundUp = !roundUp;
 							} else if(addCards(dealerHand) > 21 || hand.value > addCards(dealerHand)){
-								win += (hand.value == 21) ? Math.ceil(hand.wager*3/2) : hand.wager;
-							} else if(hand.value == dealerValue){
-								win += 0; // Push
-							} else {
-								win -= hand.wager;
+								win += (hand.value == 21) ? Math.ceil(hand.wager*5/2) : hand.wager * 2;
+							} else if(hand.value == addCards(dealerHand)){
+								win += hand.wager;
 							}
 						}
 						
 						const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [player.id]);
 						
-						if(win < 0){
-							resultMsg += `## ${player.toString()} lost ฅ${Math.abs(win)}.\n`;
-							conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-								[player.id, userDB[0][0].scritch_bucks, player.user.username]);
-						} else if(win === 0){
+						if(win < player.wager){
+							resultMsg += `## ${player.toString()} lost ฅ${player.wager - win}.\n`;
+						} else if(win > player.wager){
+							resultMsg += `## ${player.toString()} won ฅ${win - player.wager}.\n`;
+						} else {
 							resultMsg += `## ${player.toString()} broke even.\n`;
-							await conn.query('UPDATE `user` SET `scritch_bucks` = ? WHERE `user_id` = ?;', 
-								[userDB[0][0].scritch_bucks, player.id]);
-						} else if(win > 0){
-							resultMsg += `## ${player.toString()} won ฅ${win}.\n`;
-							const newScritchBucks = userDB[0][0].scritch_bucks + player.wager * player.hands.length + win;
-							const highestScritchBucks = Math.max(newScritchBucks, userDB[0][0].scritch_bucks_highscore);
-							await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-								[newScritchBucks, highestScritchBucks, player.id]);
-							conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-								[player.id, newScritchBucks, player.user.username]);
 						}
+						const newScritchBucks = userDB[0][0].scritch_bucks + win;
+						const highestScritchBucks = Math.max(newScritchBucks, userDB[0][0].scritch_bucks_highscore);
+						await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+							[newScritchBucks, highestScritchBucks, player.id]);
+						conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+							[player.id, newScritchBucks, player.user.username]);
 					}
 					await channel.send(resultMsg);
 
@@ -754,7 +752,7 @@ ${formatCards(hand.hand, emojis)}`);
 						for await (const player of players) {
 							const refundUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', 
 								[player.id]);
-							const newAmount = refundUserDB[0][0].scritch_bucks + player.wager * player.hands.reduce((sum, hand) => sum + hand.wager, 0);
+							const newAmount = refundUserDB[0][0].scritch_bucks + player.wager;
 							const highestScritchBucks = Math.max(newAmount, refundUserDB[0][0].scritch_bucks_highscore);
 							await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
 								[newAmount, highestScritchBucks, player.id]);
