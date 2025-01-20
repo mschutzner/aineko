@@ -25,7 +25,7 @@ module.exports = {
             .setDescription('Play Dwarven Dice - a game of chance that uses d6 dice (bones)!')
             .addIntegerOption(option =>
                 option.setName('buyin')
-                    .setDescription('Amount of scritch bucks to enter the game')
+                    .setDescription('Amount of scritch bucks to enter the game (minimum 25)')
                     .setRequired(true)
                     .setMinValue(1))
             .addIntegerOption(option =>
@@ -40,7 +40,7 @@ module.exports = {
 A game of chance where players and the houseroll d6 dice (bones) and try to get the highest total without rolling any 1s.
 ### How to Play
 1. The host starts a game with \`/dwarven\` setting:
-   - \`buyin\` - Amount of scritch bucks to enter
+   - \`buyin\` - Amount of scritch bucks to enter (minimum 25)
    - \`bones\` - Number of d6 dice to roll (1-9)
 2. The house always rolls 5 bones
 3. Other players can join within one minuteand choose their own number of bones.
@@ -67,6 +67,13 @@ Player 1 wins with a total of 15!
         const buyin = interaction.options.getInteger('buyin');
         const bones = interaction.options.getInteger('bones');
         const channel = interaction.channel;
+
+        if(buyin < 25) {
+            return interaction.reply({
+                content: "The minimum buy-in is 25 scritch bucks.",
+                ephemeral: true
+            });
+        }
 
         // Get database connection
         const conn = await pool.getConnection();
@@ -453,6 +460,17 @@ Player 1 wins with a total of 15!
                         }).sort((a, b) => a.includes('House') ? -1 : b.includes('House') ? 1 : 0).join('\n')}`,
                     components: []
                 });
+
+                for(const player of validResults) {
+                    if(player.member.id === 'house') continue;
+                    if(player.total > 36) {
+                        const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
+                            [player.member.id, 13, player.member.displayName, 'Quixote']);
+                        if(userCatDB[0].affectedRows){
+                            await channel.send({content: `${player.member.toString()} just gained ownership of Quixote by rolling more than 36 without busting! This unlocks the \`/swords\` command.`, files: ['images/cats/Quixote.jpg']});
+                        }
+                    }
+                }
 
                 await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id])
                     .catch(console.error);

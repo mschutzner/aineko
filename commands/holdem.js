@@ -921,6 +921,12 @@ function createLobbyButtons() {
 }
 
 async function playHoldemStage(players, pots, stage, communityCards, channel, conn, emojis) {
+    // Reset NPC raise tracking for new stage
+    players.forEach(player => {
+        player.raised = false;
+        player.alreadyRaised = false;
+    });
+
     // Update the game timestamp in the database
     await conn.query('UPDATE `game` SET `start_time` = NOW() WHERE `channel_id` = ?;', [channel.id]);
 
@@ -934,8 +940,8 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
             return [players, pots, true];
         }
 
-        if (currentPlayer.folded || currentPlayer.allIn || currentPlayer.chips === 0) {
-            if (currentPlayerIndex < players.length - 1) {
+        if (currentPlayer.folded || currentPlayer.allIn || currentPlayer.raised || currentPlayer.chips === 0) {
+            if (!currentPlayer.raised &&currentPlayerIndex < players.length - 1) {
                 currentPlayerIndex++;
                 return processPlayerAction();
             } else {
@@ -1039,6 +1045,11 @@ async function playHoldemStage(players, pots, stage, communityCards, channel, co
                             currentPlayer.chips -= difference;
                             currentPlayer.bet += difference;
                             pots[0].amount += difference;
+                            for(const player of players){
+                                player.raised = false;
+                            }
+                            currentPlayer.raised = true;
+                            currentPlayer.alreadyRaised = true;
 
                             // check for short stacked players
                             const shortStackedPlayers = [];
@@ -1145,6 +1156,13 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => `Side Pot ${i+1}: ${pot.amount
                                 let difference = currentPlayer.bet - pots[0].callAmount;
                                 pots[0].callAmount += difference;
                                 pots[0].amount += currentPlayer.chips;
+                                if(difference > 0){
+                                    for(const player of players){
+                                        player.raised = false;
+                                    }
+                                    currentPlayer.raised = true;
+                                    currentPlayer.alreadyRaised = true;
+                                }
 
                                 // check for short stacked players
                                 const shortStackedPlayers = [];

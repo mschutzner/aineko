@@ -420,6 +420,10 @@ module.exports = {
 
 			await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, "blackjack");', [channel.id]);
 
+			// Take additional wager
+			await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
+				[wager, interaction.member.id]);
+
 			const message = await interaction.reply({ 
 				content: `${interaction.member.toString()} has started a game of blackjack with a wager of ฅ${wager}!
 The game will start <t:${Math.ceil(startTime/1000)+62}:R> or when the host starts it.
@@ -504,6 +508,10 @@ ${interaction.member.toString()} ฅ${wager}`,
 								return;
 							}
 
+							// Take additional wager
+							await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
+								[joinWager, o.user.id]);
+
 							players.push(i.member);
 							players[players.length-1].wager = joinWager;
 							players[players.length-1].hands = [{
@@ -553,8 +561,9 @@ ${players.map(p => `**${p.toString()}** ฅ${p.wager}`).join('\n')}`,
 							const refundUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', 
 								[player.id]);
 							const newAmount = refundUserDB[0][0].scritch_bucks + player.hands.reduce((sum, hand) => sum + hand.wager, 0);
-							const highestScritchBucks = (newAmount > refundUserDB[0][0].scritch_bucks_highscore) ? 
-								newAmount : refundUserDB[0][0].scritch_bucks_highscore;
+							const highestScritchBucks = Math.max(newAmount, refundUserDB[0][0].scritch_bucks_highscore);
+							await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
+								[newAmount, highestScritchBucks, player.id]);
 						}
 
 						await message.edit({
@@ -728,7 +737,7 @@ ${formatCards(hand.hand, emojis)}`);
 						} else if(win > 0){
 							resultMsg += `## ${player.toString()} won ฅ${win}.\n`;
 							const newScritchBucks = userDB[0][0].scritch_bucks + player.wager * player.hands.length + win;
-							const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
+							const highestScritchBucks = Math.max(newScritchBucks, userDB[0][0].scritch_bucks_highscore);
 							await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
 								[newScritchBucks, highestScritchBucks, player.id]);
 							conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
@@ -746,9 +755,7 @@ ${formatCards(hand.hand, emojis)}`);
 							const refundUserDB = await conn.query('SELECT `scritch_bucks`, `scritch_bucks_highscore` FROM `user` WHERE `user_id` = ?;', 
 								[player.id]);
 							const newAmount = refundUserDB[0][0].scritch_bucks + player.wager * player.hands.reduce((sum, hand) => sum + hand.wager, 0);
-							const highestScritchBucks = (newAmount > refundUserDB[0][0].scritch_bucks_highscore) ? 
-								newAmount : refundUserDB[0][0].scritch_bucks_highscore;
-							
+							const highestScritchBucks = Math.max(newAmount, refundUserDB[0][0].scritch_bucks_highscore);
 							await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
 								[newAmount, highestScritchBucks, player.id]);
 						}

@@ -828,7 +828,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: $
 
     for(const card of communityCards.slice(0, 3)){
         if(card[0] === 3 && card[1] === 1){
-            await channel.send(`## Ace of Spades revealed! The dungeon master is rolling 2d6 on the wild magic table!`);
+            await channel.send(`## Ace of Spades revealed! The game master is rolling 2d6 on the wild magic table!`);
 
             await sleep(1500);
 
@@ -869,7 +869,7 @@ Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: ${pot.amount}` : `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
 
     if(!wildMagic && communityCards[3][0] === 3 && communityCards[3][1] === 1){
-        await channel.send(`## Ace of Spades revealed! The dungeon master is rolling 2d6 on the wild magic table!`);
+        await channel.send(`## Ace of Spades revealed! The game master is rolling 2d6 on the wild magic table!`);
 
         await sleep(1500);
 
@@ -909,7 +909,7 @@ Main Pot: ${pots[0].amount}
 ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: ${pot.amount}` : `Side Pot ${i+1}: ${pot.amount}`).join('\n') : ''}`);
     
         if(!wildMagic && communityCards[4][0] === 3 && communityCards[4][1] === 1){
-            await channel.send(`## Ace of Spades revealed! The dungeon master is rolling 2d6 on the wild magic table!`);
+            await channel.send(`## Ace of Spades revealed! The game master is rolling 2d6 on the wild magic table!`);
     
             await sleep(1500);
     
@@ -940,7 +940,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: $
 async function determineWinner(deck, communityCards, players, pots, host, buyIn, smallBlindAmount, bigBlindAmount, startingCallAmount, wildMagic, channel, conn, emojis) {
     for(const card of communityCards){
         if(!wildMagic && card[0] === 3 && card[1] === 1){
-            await channel.send(`## Ace of Spades revealed! The dungeon master is rolling 2d6 on the wild magic table!`);
+            await channel.send(`## Ace of Spades revealed! The game master is rolling 2d6 on the wild magic table!`);
 
             await sleep(1500);
 
@@ -1109,11 +1109,11 @@ async function completeRound(players, host, buyIn, smallBlindAmount, bigBlindAmo
         content: `## Round over!
 Players ended the last round with:
 ${previousPlayers.map(player => `${player.member.toString()} ${player.chips}${player.cashedOut ? ' chips (cashed out)' : player.chips === 0 ? ' chips (busted)' : ' chips'}`).join('\n')}
-### The dungeon master is ${host.toString()}.
-The dungeon master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
-Players can cash out now, new players can join, and the dungeon master can add or cash out NPCs, start the next round, or cancel the game.
+### The game master is ${host.toString()}.
+The game master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
+Players can cash out now, new players can join, and the game master can add or cash out NPCs, start the next round, or cancel the game.
 ## Players in next game:
-${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
+${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (GM)' : ''}`).join('\n')}`,
         components: [actionRow]
     });
 
@@ -1157,14 +1157,14 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                     content: `## Round over!
 Players ended the last round with:
 ${previousPlayers.map(player => `${player.member.toString()} ${player.chips}${player.cashedOut ? ' chips (cashed out)' : player.chips === 0 ? ' chips (busted)' : ' chips'}`).join('\n')}
-### The dungeon master is ${host.toString()}.
-The dungeon master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
-Players can cash out now, new players can join, and the dungeon master can add or cash out NPCs, start the next round, or cancel the game.
+### The game master is ${host.toString()}.
+The game master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
+Players can cash out now, new players can join, and the game master can add or cash out NPCs, start the next round, or cancel the game.
 ## Players in next game:
-${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
+${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (GM)' : ''}`).join('\n')}`,
                     components: [actionRow]
                 });
-                await channel.send(`${i.user.toString()}${host.id === i.user.id ? ' (DM)' : ''} has joined the game with a buy-in of ${buyIn} chips!`);
+                await channel.send(`${i.user.toString()}${host.id === i.user.id ? ' (GM)' : ''} has joined the game with a buy-in of ${buyIn} chips!`);
             }  else if (i.customId === 'add-npc') {
                 if(players.length >= 10) {
                     await i.reply({ content: "The game is too full. Only 10 players can join.", ephemeral: true });
@@ -1241,11 +1241,11 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                         content: `## Round over!
 Players ended the last round with:
 ${previousPlayers.map(player => `${player.member.toString()} ${player.chips}${player.cashedOut ? ' chips (cashed out)' : player.chips === 0 ? ' chips (busted)' : ' chips'}`).join('\n')}
-### The dungeon master is ${host.toString()}.
-The dungeon master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
-Players can cash out now, new players can join, and the dungeon master can add or cash out NPCs, start the next round, or cancel the game.
+### The game master is ${host.toString()}.
+The game master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
+Players can cash out now, new players can join, and the game master can add or cash out NPCs, start the next round, or cancel the game.
 ## Players in next game:
-${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
+${players.map(player => `${player.member.toString()}${host.id === player.member.id ? ' (GM)' : ''}`).join('\n')}`,
                         components: [actionRow]
                     });
                 } catch (error) {
@@ -1321,11 +1321,11 @@ ${players.map(player => `${player.member.toString()}${host.id === player.member.
                             content: `## Round over!
 Players ended the last round with:
 ${previousPlayers.map(p => `${p.member.toString()} ${p.chips}${p.cashedOut ? ' chips (cashed out)' : p.chips === 0 ? ' chips (busted)' : ' chips'}`).join('\n')}
-### The dungeon master is ${host.toString()}.
-The dungeon master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
-Players can cash out now, new players can join, and the dungeon master can add or cash out NPCs, start the next round, or cancel the game.
+### The game master is ${host.toString()}.
+The game master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
+Players can cash out now, new players can join, and the game master can add or cash out NPCs, start the next round, or cancel the game.
 ## Players in next game:
-${players.map(p => `${p.member.toString()}${host.id === p.member.id ? ' (DM)' : ''}`).join('\n')}`,
+${players.map(p => `${p.member.toString()}${host.id === p.member.id ? ' (GM)' : ''}`).join('\n')}`,
                             components: [actionRow]
                         });
                     } catch (error) {
@@ -1349,18 +1349,18 @@ ${players.map(p => `${p.member.toString()}${host.id === p.member.id ? ' (DM)' : 
                         content: `## Round over!
 Players ended the last round with:
 ${previousPlayers.map(p => `${p.member.toString()} ${p.chips}${p.cashedOut ? ' chips (cashed out)' : p.chips === 0 ? ' chips (busted)' : ' chips'}`).join('\n')}
-### The dungeon master is ${host.toString()}.
-The dungeon master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
-Players can cash out now, new players can join, and the dungeon master can add or cash out NPCs, start the next round, or cancel the game.
+### The game master is ${host.toString()}.
+The game master must start game <t:${nexRoundStartTime}:R> or everyone will be cashed out.
+Players can cash out now, new players can join, and the game master can add or cash out NPCs, start the next round, or cancel the game.
 ## Players in next game:
-${players.map(p => `${p.member.toString()}${host.id === p.member.id ? ' (DM)' : ''}`).join('\n')}`,
+${players.map(p => `${p.member.toString()}${host.id === p.member.id ? ' (GM)' : ''}`).join('\n')}`,
                         components: [actionRow]
                     });
                 } 
             } else if (i.customId === 'start' || i.customId === 'cancel') {
                 // Only game host can start/cancel
                 if (channel.guild.id !== '825883828798881822' && i.user.id !== host.id) {
-                    await i.reply({ content: `Only the game dungeon master can ${i.customId} the game.`, ephemeral: true });
+                    await i.reply({ content: `Only the game game master can ${i.customId} the game.`, ephemeral: true });
                     return;
                 }
 
@@ -1404,9 +1404,9 @@ ${previousPlayers.map(player => `${player.member.toString()} ${player.chips}${pl
             return;
         } else {
             if (reason === 'cancelled') {                         
-                await channel.send('Game cancelled by dungeon master. All players have been cashed out.');
+                await channel.send('Game cancelled by game master. All players have been cashed out.');
             } else if(reason === 'time'){                              
-                await channel.send('Game cancelled because the dungeon master did not start the game in time. All players have been cashed out.');
+                await channel.send('Game cancelled because the game master did not start the game in time. All players have been cashed out.');
             } else  if(reason !== 'cashed out') {                                 
                 await channel.send('Game cancelled: Not enough players. All players have been cashed out.');
             }  
@@ -1481,12 +1481,6 @@ function createLobbyButtons() {
 async function playHoldemStage(players, pots, stage, startingCallAmount, wildMagic, communityCards, channel, conn, emojis) {
     // Reset NPC raise tracking for new stage
     players.forEach(player => {
-        if (player.npc) {
-            if (!player.stageRaises) {
-                player.stageRaises = new Map();
-            }
-            player.stageRaises.set(stage, false);
-        }
         player.raised = false;
         player.alreadyRaised = false;
     });
@@ -1507,7 +1501,7 @@ async function playHoldemStage(players, pots, stage, startingCallAmount, wildMag
         }
 
         if (currentPlayer.folded || currentPlayer.allIn || currentPlayer.raised || currentPlayer.chips === 0) {
-            if (currentPlayerIndex < players.length - 1) {
+            if (!currentPlayer.raised && currentPlayerIndex < players.length - 1) {
                 currentPlayerIndex++;
                 return processPlayerAction();
             } else {
@@ -1779,6 +1773,8 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: $
                                     for(const player of players){
                                         player.raised = false;
                                     }
+                                    currentPlayer.raised = true;
+                                    currentPlayer.alreadyRaised = true;
                                 }
                                 // check for short stacked players
                                 const shortStackedPlayers = [];
@@ -1913,7 +1909,7 @@ ${pots.length > 1 ? pots.slice(1).map((pot, i) => pot.wild ? `Wild Pot ${i+1}: $
 }
 
 // Add these functions to handle NPC AI decisions
-async function getNPCAction(player, pots, betLimit, wildMagic, stage, communityCards) {
+async function getNPCAction(players,player, pots, betLimit, wildMagic, stage, communityCards) {
     const NUM_SIMULATIONS = communityCards[4][0] === 4 ? 2500 : 10000;
     const RAISE_THRESHOLD = 0.625;
     const RANDOMNESS_FACTOR = 0.141;
@@ -1923,7 +1919,7 @@ async function getNPCAction(player, pots, betLimit, wildMagic, stage, communityC
     const potOdds = callAmount / (pots[0].amount + callAmount);
     
     // Count active opponents
-    const numOpponents = pots[0].players.length - 1;
+    const numOpponents = players.filter(p => !p.folded).length - 1;
     if (numOpponents === 0) return 'call'; // No opponents left, just call
     
     // Run Monte Carlo simulation
@@ -1989,7 +1985,7 @@ async function getNPCAction(player, pots, betLimit, wildMagic, stage, communityC
     // Calculate maximum bet based on win rate
     const maxBet = Math.floor(winRate * player.chips);
     
-    // Pre-flop decisions are more aggressive       
+    // determine the action
     if(player.chips <= callAmount){
         if(winRate > adjustedRaiseThreshold){
             return 'allIn';
@@ -2015,7 +2011,7 @@ async function getNPCAction(player, pots, betLimit, wildMagic, stage, communityC
 }
 
 async function applyNPCAction(currentPlayer, players, pots, betLimit, meetsCallAmount, wildMagic, stage, communityCards, channel, emojis) {
-    const actionResult = await getNPCAction(currentPlayer, pots, betLimit, wildMagic, stage, communityCards);
+    const actionResult = await getNPCAction(players, currentPlayer, pots, betLimit, wildMagic, stage, communityCards);
     
     const action = typeof actionResult === 'string' ? actionResult : actionResult.action;
     let difference = pots[0].callAmount - currentPlayer.bet;
@@ -2100,6 +2096,8 @@ async function applyNPCAction(currentPlayer, players, pots, betLimit, meetsCallA
                     for(const player of players){
                         player.raised = false;
                     }
+                    currentPlayer.raised = true;
+                    currentPlayer.alreadyRaised = true;
                 }
                 pots[0].callAmount += currentPlayer.bet - pots[0].callAmount;
                 pots[0].amount += currentPlayer.chips;
@@ -2199,8 +2197,8 @@ module.exports = {
                 .setRequired(false)
 				.setMinValue(0))
         .addStringOption(option =>
-            option.setName('dm-play')
-                .setDescription('Whether the DM will participate. Default is true.')
+            option.setName('gm-play')
+                .setDescription('Whether the GM will participate. Default is true.')
                 .setRequired(false)
                 .addChoices(
                     { name: 'true', value: 'true' },
@@ -2209,7 +2207,7 @@ module.exports = {
     game: true,
     catId: 9, //Joey
     image: 'https://cdn.discordapp.com/attachments/1000574162017992884/1325624155919614034/holdem-hands.jpeg',
-    help: `Shadowdale Hold'em is a poker-style card game popular in taverns across the realms. It's similar to Texas Hold'em but with a twist suited for the adventurous life of Faerûn. This command does not use scritch bucks and instead is intended to use D&D currency. The dungeon master (the player who started the game) can choose to not participate and can add NPCs that use the Monte Carlo method to decide their actions.
+    help: `Shadowdale Hold'em is a poker-style card game popular in taverns across the realms. It's similar to Texas Hold'em but with a twist suited for the adventurous life of Faerûn. This command does not use scritch bucks and instead is intended to use D&D currency. The game master (the player who started the game) can choose to not participate and can add NPCs that use the Monte Carlo method to decide their actions.
 
 **Game Flow:**
 1. The game uses a standard 52-card deck that is shuffled at the start of every round, plus a joker card that is set aside for later.
@@ -2266,7 +2264,7 @@ When ever an Ace of Spades is revealed among the community cards, it triggers a 
         let smallBlindAmount = interaction.options.getInteger('small-blind');
         let bigBlindAmount = interaction.options.getInteger('big-blind');
         let startingCallAmount;
-        const dmPlay = interaction.options.getString('dm-play') === null ? true : interaction.options.getString('dm-play') === 'true';
+        const gmPlay = interaction.options.getString('gm-play') === null ? true : interaction.options.getString('gm-play') === 'true';
         let npcCount = 0;
         const channel = interaction.channel;
         const startTime = Date.now();
@@ -2302,11 +2300,11 @@ When ever an Ace of Spades is revealed among the community cards, it triggers a 
         try {
             // For the actual game message
             const message = await interaction.reply({ 
-                content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the dungeon master of this game! 
-The a buy-in is ${buyIn} chips (no scritch bucks required).
-The game will start <t:${Math.ceil(startTime/1000)+122}:R> or when the dungeon master starts it.
-${dmPlay ? `## Players
-${interaction.member.toString()} (DM)` : ''}`,
+                content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the game master of this game! 
+The buy-in is ${buyIn} chips (no scritch bucks required).
+The game will start <t:${Math.ceil(startTime/1000)+122}:R> or when the game master starts it.
+${gmPlay ? `## Players
+${interaction.member.toString()} (GM)` : ''}`,
                 components: createLobbyButtons(),
                 fetchReply: true
             });
@@ -2315,7 +2313,7 @@ ${interaction.member.toString()} (DM)` : ''}`,
             await conn.query('INSERT INTO `game` (channel_id, game) VALUES (?, "shadowdale holdem");', [channel.id]);
 
             // Create list of players with their chips
-            let players = dmPlay ? [{
+            let players = gmPlay ? [{
                 member: interaction.member,
                 chips: buyIn,
                 bet: 0,
@@ -2352,14 +2350,14 @@ ${interaction.member.toString()} (DM)` : ''}`,
                         });
 
                         await i.deferUpdate();
-                        await channel.send(`${i.user.toString()}${interaction.member.id === i.user.id ? ' (DM)' : ''} has joined the game with a buy-in of ${buyIn} chips!`);
+                        await channel.send(`${i.user.toString()}${interaction.member.id === i.user.id ? ' (GM)' : ''} has joined the game with a buy-in of ${buyIn} chips!`);
 
                         await message.edit({
-                            content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the dungeon master of this game! 
-The a buy-in is ${buyIn} chips (no scritch bucks required).
-The game will start <t:${Math.ceil(startTime/1000)+122}:R> or when the dungeon master starts it.
+                            content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the game master of this game! 
+The buy-in is ${buyIn} chips (no scritch bucks required).
+The game will start <t:${Math.ceil(startTime/1000)+122}:R> or when the game master starts it.
 ## Players
-${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
+${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (GM)' : ''}`).join('\n')}`,
                             components: createLobbyButtons()
                         });
                     } else if (i.customId === 'add-npc') {
@@ -2436,11 +2434,11 @@ ${players.map(player => `${player.member.toString()}${interaction.member.id === 
                             await channel.send(`${name} (NPC) has joined the game with a buy-in of ${buyIn} chips!`);
 
                             await message.edit({
-                                content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the dungeon master of this game! 
-The a buy-in is ${buyIn} chips (no scritch bucks required).
-The game will start <t:${Math.ceil(startTime/1000)+122}:R> or when the dungen master starts it.
+                                content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the game master of this game! 
+The buy-in is ${buyIn} chips (no scritch bucks required).
+The game will start <t:${Math.ceil(startTime/1000)+122}:R> or when the game master starts it.
 ## Players
-${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
+${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (GM)' : ''}`).join('\n')}`,
                                 components: createLobbyButtons()
                             });
                         } catch (error) {
@@ -2449,7 +2447,7 @@ ${players.map(player => `${player.member.toString()}${interaction.member.id === 
                     } else if (i.customId === 'start' || i.customId === 'cancel') {
                         // Only game host can start/cancel
                         if (channel.guild.id !== '825883828798881822' && i.user.id !== interaction.member.id) {
-                            await i.reply({ content: `Only the game dungeon master can ${i.customId} the game.`, ephemeral: true });
+                            await i.reply({ content: `Only the game game master can ${i.customId} the game.`, ephemeral: true });
                             return;
                         }
 
@@ -2481,10 +2479,10 @@ ${players.map(player => `${player.member.toString()}${interaction.member.id === 
                     const bigBlindAmount = smallBlindAmount * 2;
 
                     interaction.editReply({
-                        content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the dungeon master of this game! 
-The a buy-in is ${buyIn} chips (no scritch bucks required).
+                        content: `${interaction.member.toString()} has started a game of Shadowdale Hold'em and is the game master of this game! 
+The buy-in is ${buyIn} chips (no scritch bucks required).
 ## Players
-${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
+${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (GM)' : ''}`).join('\n')}`,
                         components: [],
                     });
                     
@@ -2492,17 +2490,17 @@ ${players.map(player => `${player.member.toString()}${interaction.member.id === 
                 } else if (reason === 'cancelled') {
                     if(!players.some(player => player.member.id === interaction.member.id)) players.unshift({ member: interaction.member });
                     await interaction.editReply({
-                        content: `Game cancelled by dungeon master.
+                        content: `Game cancelled by game master.
 ## Players
-${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
+${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (GM)' : ''}`).join('\n')}`,
                         components: []
                     });
-                    await channel.send('Game cancelled by dungeon master..');
+                    await channel.send('Game cancelled by game master.');
                 } else {
                     await interaction.editReply({
                         content: `Game cancelled: Not enough players joined within the time limit.
 ## Players
-${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (DM)' : ''}`).join('\n')}`,
+${players.map(player => `${player.member.toString()}${interaction.member.id === player.member.id ? ' (GM)' : ''}`).join('\n')}`,
                         components: []
                     });
                 }

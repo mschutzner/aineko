@@ -47,9 +47,9 @@ module.exports = {
 				const newScritchBucks = userDB[0][0].scritch_bucks - cat.price;
 				const highestScritchBucks = (newScritchBucks > userDB[0][0].scritch_bucks_highscore) ? newScritchBucks : userDB[0][0].scritch_bucks_highscore;
 				await conn.query('UPDATE `user` SET `scritch_bucks` = ?, `scritch_bucks_highscore` = ? WHERE `user_id` = ?;',
-					[newScritchBucks, highestScritchBucks, member.id]);
+					[newScritchBucks, highestScritchBucks, user.id]);
 				conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
-					[member.id, newScritchBucks, member.user.username]);
+					[user.id, newScritchBucks, user.username]);
 
 				if(cat.command){
 
