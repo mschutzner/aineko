@@ -101,13 +101,18 @@ client.on("interactionCreate", async interaction => {
 		}
 
 		if(command.cooldown){
-			const timerDB = await conn.query('SELECT * FROM `command_timer` WHERE `user_id` = ? AND `guild_id` = ? AND `command_name` = ?;',
-				[user.id, guild.id, command.data.name]);
+			const timerDB = await conn.query('SELECT * FROM `command_timer` WHERE `user_id` = ? AND `command_name` = ?;',
+				[user.id, command.data.name]);
 
 			if(timerDB[0].length > 0){
 				const prevEndTime = timerDB[0][0].end_time.getTime();
 				const timeRemaining = prevEndTime - Date.now();
-				return interaction.reply({content: `You can use this command again <t:${prevEndTime/1000}:R>.`, ephemeral: true});
+				if(timeRemaining > 0){
+					return interaction.reply({content: `You can use this command again <t:${prevEndTime/1000}:R>.`, ephemeral: true});
+				} else {
+					await conn.query('DELETE FROM `command_timer` WHERE `user_id` = ? AND `command_name` = ?;',
+						[user.id, command.data.name]);
+				}
 			}
 
 			const endTime = unixToMysqlDatetime(Date.now() + command.cooldown);
@@ -115,8 +120,8 @@ client.on("interactionCreate", async interaction => {
 				[user.id, guild.id, command.data.name, endTime]);
 
 			setTimeout(async () => {
-				await conn.query('DELETE FROM `command_timer` WHERE `user_id` = ? AND `guild_id` = ? AND `command_name` = ?;',
-					[user.id, guild.id, command.data.name]);
+				await conn.query('DELETE FROM `command_timer` WHERE `user_id` = ? AND `command_name` = ?;',
+					[user.id, command.data.name]);
 			}, command.cooldown);
 		} 
 
@@ -924,12 +929,12 @@ async function timerSetup(){
 
 			if(timeRemaining > 0){
 				setTimeout(async () => {
-					await conn.query('DELETE FROM `command_timer` WHERE `user_id` = ? AND `guild_id` = ? AND `command_name` = ?;',
-						[commandTimer.user_id, commandTimer.guild_id, commandTimer.command_name]);
+					await conn.query('DELETE FROM `command_timer` WHERE `user_id` = ? AND `command_name` = ?;',
+						[commandTimer.user_id, commandTimer.command_name]);
 				}, timeRemaining);
 			} else {
-				await conn.query('DELETE FROM `command_timer` WHERE `user_id` = ? AND `guild_id` = ? AND `command_name` = ?;',
-					[commandTimer.user_id, commandTimer.guild_id, commandTimer.command_name]);
+				await conn.query('DELETE FROM `command_timer` WHERE `user_id` = ? AND `command_name` = ?;',
+					[commandTimer.user_id, commandTimer.command_name]);
 			}
 		}	
 	} finally{

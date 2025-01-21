@@ -49,7 +49,7 @@ module.exports = {
 					[mem.user_id, newScritchBucks2, mem.name]);
 			}
 
-			await interaction.reply(`${memberList} ${allText}got 100 scritch bucks${ eachText}!`);
+			await interaction.reply(`${memberList} ${allText}got ฅ100 ${ eachText}!`);
 		} finally{
 			//release pool connection
 			conn.release();
