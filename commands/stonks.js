@@ -32,13 +32,16 @@ module.exports = {
 						.setDescription('Unix timestamp to end the graph (defaults to now)')
 						.setRequired(false))),
 	async execute(interaction, pool) {
+		// Defer the reply immediately
+		await interaction.deferReply();
+		
 		const conn = await pool.getConnection();
 		try {
 			const member = interaction.member;
 			const userDB = await conn.query('SELECT * FROM `user` WHERE `user_id` = ?;', [member.id]);
 
 			if(userDB[0].length == 0){
-				return await interaction.reply({ 
+				return await interaction.editReply({ 
 					content: 'You weren\'t found in the database.',
 					ephemeral: true 
 				});
@@ -47,7 +50,7 @@ module.exports = {
 			const userScritchDB = await conn.query('SELECT * FROM `user_scritch` WHERE `user_id` = ?;', [member.id]);
 
 			if(userScritchDB[0].length == 0){
-				return await interaction.reply({ 
+				return await interaction.editReply({ 
 					content: 'You weren\'t found in the database.',
 					ephemeral: true 
 				});
@@ -78,7 +81,7 @@ module.exports = {
 				
 				// Validate hours
 				if (startHours < 0 || endHours < 0) {
-					return await interaction.reply({ 
+					return await interaction.editReply({ 
 						content: 'Hours cannot be negative. Please provide positive values.',
 						ephemeral: true 
 					});
@@ -90,7 +93,7 @@ module.exports = {
 				}
 				
 				if (endHours >= startHours) {
-					return await interaction.reply({ 
+					return await interaction.editReply({ 
 						content: 'Start time must be earlier than end time. Please provide a larger number for start hours than end hours.',
 						ephemeral: true 
 					});
@@ -105,7 +108,7 @@ module.exports = {
 				
 				// Validate timestamps
 				if (startTimestamp < 0) {
-					return await interaction.reply({ 
+					return await interaction.editReply({ 
 						content: 'Start timestamp cannot be negative. Please provide a valid Unix timestamp.',
 						ephemeral: true 
 					});
@@ -116,7 +119,7 @@ module.exports = {
 				}
 				
 				if (endTimestamp && endTimestamp < 0) {
-					return await interaction.reply({ 
+					return await interaction.editReply({ 
 						content: 'End timestamp cannot be negative. Please provide a valid Unix timestamp.',
 						ephemeral: true 
 					});
@@ -124,14 +127,14 @@ module.exports = {
 
 				const currentUnixTime = Math.floor(curTime / 1000);
 				if (startTimestamp > currentUnixTime) {
-					return await interaction.reply({ 
+					return await interaction.editReply({ 
 						content: 'Start timestamp cannot be in the future.',
 						ephemeral: true 
 					});
 				}
 				
 				if (endTimestamp && endTimestamp > currentUnixTime) {
-					return await interaction.reply({ 
+					return await interaction.editReply({ 
 						content: 'End timestamp cannot be in the future.',
 						ephemeral: true 
 					});
@@ -143,7 +146,7 @@ module.exports = {
 						: curTime;
 				
 				if (startTime >= endTime) {
-					return await interaction.reply({ 
+					return await interaction.editReply({ 
 						content: 'Start time must be earlier than end time. Please provide a smaller timestamp for start than end.',
 						ephemeral: true 
 					});
@@ -225,7 +228,7 @@ module.exports = {
 				ctx.stroke();
 
 				attachment = new AttachmentBuilder(canvas.toBuffer(), { name: "scritch-graph.png"});
-				await interaction.reply({ files: [attachment] });
+				await interaction.editReply({ files: [attachment] });
 			}
 		} finally {
 			conn.release();

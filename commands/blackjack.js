@@ -409,6 +409,7 @@ module.exports = {
 
 		const players = [interaction.member];
 		players[0].wager = wager;
+		players[0].insurance = 0;
 		players[0].hands = [{
 			hand: [],
 			value: 0,
@@ -513,10 +514,11 @@ ${interaction.member.toString()} ฅ${wager}`,
 
 							// Take additional wager
 							await conn.query('UPDATE `user` SET `scritch_bucks` = `scritch_bucks` - ? WHERE `user_id` = ?;', 
-								[joinWager, o.user.id]);
+								[joinWager, i.user.id]);
 
 							players.push(i.member);
 							players[players.length-1].wager = joinWager;
+							players[players.length-1].insurance = 0;
 							players[players.length-1].hands = [{
 								hand: [],
 								value: 0,

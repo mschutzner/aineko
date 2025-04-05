@@ -14,40 +14,34 @@ module.exports = {
 			option.setName('timezone')
 				.setDescription("The UTC offset in hours (e.g., 0 for UTC or -5 for EST )")
 				.setMinValue(-12)
-				.setMaxValue(14)
-				.setRequired(true))
+				.setMaxValue(14))
 		.addIntegerOption(option =>
 			option.setName('month')
-				.setDescription("The month.")
-				.setRequired(true))
+				.setDescription("The month (defaults to current month)."))
 		.addIntegerOption(option =>
 			option.setName('day')
-				.setDescription("The day.")
-				.setRequired(true))
+				.setDescription("The day (defaults to current day)."))
 		.addIntegerOption(option =>
 			option.setName('year')
-				.setDescription("The full year.")
-				.setRequired(true))
+				.setDescription("The full year (defaults to current year)."))
 		.addIntegerOption(option =>
 			option.setName('hours')
-				.setDescription("The hours (24-hour format).")
-				.setRequired(false))
+				.setDescription("The hours in 24-hour format (defaults to current hour)."))
 		.addIntegerOption(option =>
 			option.setName('minutes')
-				.setDescription("The minutes.")
-				.setRequired(false))
+				.setDescription("The minutes (defaults to current minute)."))
 		.addIntegerOption(option =>
 			option.setName('seconds')
-				.setDescription("The seconds.")
-				.setRequired(false)),
+				.setDescription("The seconds (defaults to current second).")),
 	async execute(interaction) {
-		const month = interaction.options.getInteger('month');
-		const day = interaction.options.getInteger('day');
-		const year = interaction.options.getInteger('year');
-		const timezoneOffset = interaction.options.getInteger('timezone');
-		const hours = interaction.options.getInteger('hours') || 0;
-		const minutes = interaction.options.getInteger('minutes') || 0;
-		const seconds = interaction.options.getInteger('seconds') || 0;
+		const now = new Date();
+		const timezoneOffset = interaction.options.getInteger('timezone') ?? -(now.getTimezoneOffset() / 60);
+		const month = interaction.options.getInteger('month') ?? (now.getMonth() + 1);
+		const day = interaction.options.getInteger('day') ?? now.getDate();
+		const year = interaction.options.getInteger('year') ?? now.getFullYear();
+		const hours = interaction.options.getInteger('hours') ?? now.getHours();
+		const minutes = interaction.options.getInteger('minutes') ?? now.getMinutes();
+		const seconds = interaction.options.getInteger('seconds') ?? now.getSeconds();
 
 		try {
 			const date = new Date(year, month - 1, day, hours - timezoneOffset, minutes, seconds);

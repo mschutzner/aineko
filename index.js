@@ -6,6 +6,7 @@ const { Campaign } = require('patreon-discord');
 const { stage, lurkerMin, memberMin, regularMin, championMin, decayRate, tickRate, facepalms } = require("./config.json");
 const { sleep, randInt, unixToMysqlDatetime, formatDuration} = require("./utils.js");
 const { OpenAI } = require('openai');
+const axios = require('axios');
 
 const emojis = [];
 
@@ -33,7 +34,7 @@ const pool = mysql.createPool({
 	database: process.env.MYSQL_DB,
 	password: process.env.MYSQL_PASSWORD,
 	waitForConnections: true,
-	connectionLimit: 10,
+	connectionLimit: 50,
 	queueLimit: 0
 });
 
@@ -945,14 +946,16 @@ async function timerSetup(){
 
 // Login to Discord with your client's token
 client.once("ready", async () => {
-	client.user.setPresence({ activities: [{ name: 'aineko.gg' }], status: 'available' });
+	client.user.setPresence({ activities: [{ name: 'blackjack!' }], status: 'available' });
 
+	const response = await axios.get(`https://discord.com/api/v10/applications/${process.env.CLIENT_ID}/emojis`, {
+		headers: {
+			Authorization: `Bot ${process.env.TOKEN}`
+		}
+	});
+	const items = response.data.items;
 	
-	
-	const testGuild = await client.guilds.fetch(process.env.TEST_GUILD_ID);
-	const fetchedEmojis = await testGuild.emojis.fetch()
-	// Map them to an object for easy access
-	fetchedEmojis.forEach(emoji => {
+	items.forEach(emoji => {
 		emojis.push({
 			id: emoji.id,
 			name: emoji.name,
@@ -993,11 +996,6 @@ client.once("ready", async () => {
 						// Add Aineko cat to the user
 						const userCatDB = await conn.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
 							[member.id, 1, member.displayName, 'Aineko']);
-
-						// Check if the cat was actually inserted
-						if(userCatDB[0].affectedRows > 0) {
-							member.send({content: 'You just gained ownership of Aineko by joining your first server with Aineko in it. Aineko is your first cat but you can collect many more by interacting with the bot. Owning Aineko unlocks the /scritch command which you can use to earn "scritch bucks", an in bot currency represented by ฅ.', files: ['images/cats/Aineko.jpg']});
-						}
 					}
 				}
 			}
