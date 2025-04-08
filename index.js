@@ -800,13 +800,13 @@ async function questionLoop() {
 	
 	const curTime = new Date().getTime();
 
-	// Only schedule question generation if in production
-	if (stage === 'production') {
-		// Schedule question generation for midnight
-		setTimeout(async () => {
-			await generateAndStoreQuestion();
-		}, midnightTime - curTime);
-	}
+	// // Only schedule question generation if in production
+	// if (stage === 'production') {
+	// 	// Schedule question generation for midnight
+	// 	setTimeout(async () => {
+	// 		await generateAndStoreQuestion();
+	// 	}, midnightTime - curTime);
+	// }
 
 	// Rest of the existing questionLoop function...
 	setTimeout(async () => {

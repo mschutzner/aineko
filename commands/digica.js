@@ -823,6 +823,10 @@ ${challengeCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ➡️ ${
                     'UPDATE `user` SET `scritch_bucks` = scritch_bucks - ?, `digica_hand` = ? WHERE `user_id` = ?;',
                     [cardBuy, handString, i.user.id]
                 );
+                await pool.query(
+                    'INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
+                    [i.user.id, latestUserRecord.scritch_bucks - cardBuy, i.user.username]
+                );
                 
                 // Show the new cards and updated hand
                 await channel.send({
