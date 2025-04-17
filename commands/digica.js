@@ -84,7 +84,7 @@ function getSuitEmoji(suit, emojis){
 const valueFaces = ['Joker', 'Ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King'];
 
 function getScritchValue(value){
-    return Math.ceil(cardSell * Math.pow(cardMultiplier, value - 1) / 50) * 50;
+    return Math.round(cardSell * Math.pow(cardMultiplier, value - 2));
 }
 
 
@@ -197,10 +197,11 @@ ${challengeCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ➡️ ${
     );
 
     // Now set up a collector on the new message
-    const collector = message.createMessageComponentCollector();
+    const collector = message.createMessageComponentCollector({ time: 300000 });
 
     collector.on('collect', async i => {     
         try {
+            if(i.customId !== 'play_challenge') return;
             // Validate challenge hasn't changed
             const stillValid = await validateChallenge(challengeCards, channel.guildId, pool);
             if (!stillValid) {
@@ -279,205 +280,6 @@ ${challengeCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ➡️ ${
     });
 }
 
-async function handleNextMerge(cards, member, channel, emojis, pool, blankEmoji) {
-    // Check for any more possible merges
-    let hasMergeable = false;
-    for (let i = 0; i < cards.length; i++) {
-        for (let j = i + 1; j < cards.length; j++) {
-            if (
-                (cards[i][0] === 4 && cards[j][0] === 4) || // Two jokers
-                (cards[i][0] === 5 && cards[j][0] === 5 && cards[i][1] === cards[j][1]) || // Same level scritch
-                (cards[i][0] === cards[j][0] && cards[i][0] !== 5) // Same suit non-scritch
-            ) {
-                hasMergeable = true;
-                break;
-            }
-        }
-        if (hasMergeable) break;
-    }
-
-    if (!hasMergeable || cards.length < 2) {
-        return channel.send(`### <@${member.id}>'s Hand (no mergeable cards):
-${cards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
-${cards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`);
-    }
-
-    // Show the user's new hand with a blank in between the last card
-    const msg = await channel.send(
-        `### <@${member.id}>'s New Hand (Merge Again?):
-${cards.slice(0, -1).map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')} ${blankEmoji} ${getValueEmoji(cards[cards.length-1][0], cards[cards.length-1][1], emojis)} 
-${cards.slice(0, -1).map(card => getSuitEmoji(card[0], emojis)).join(' ')} ${blankEmoji} ${getSuitEmoji(cards[cards.length-1][0], emojis)}
-${cards.slice(0, -1).map((_, i) => getEmojiIdByNumber(i+1)).join(' ')} ${blankEmoji} ${getEmojiIdByNumber(cards.length)}`
-    );
-    // Add number reactions
-    for (let i = 1; i <= cards.length; i++) {
-        await msg.react(getEmojiByNumber(i));
-    }
-
-    const collector = msg.createReactionCollector({ dispose: true });
-    let selectedIndices = [];
-
-    return new Promise((resolve) => {
-        collector.on('collect', async (reaction, user) => {
-            if(user.bot) return;
-
-            if (user.id !== member.id) {
-                await reaction.users.remove(user);
-                return;
-            }
-
-            // Validate the user's current hand in DB
-            const stillValid = await validateCards(cards, member, pool);
-            if (!stillValid) {
-                await channel.send(
-                    "Your hand has changed since starting the merge. Please try again."
-                );
-                return;
-            }
-
-            const index = getNumberByEmoji(reaction.emoji.name) - 1;
-            if (index >= 0 && index < cards.length && !selectedIndices.includes(index)) {
-                selectedIndices.push(index);
-            }
-
-            if (selectedIndices.length !== 2) return;
-
-            // Merge logic
-            const [card1, card2] = [
-                cards[selectedIndices[0]],
-                cards[selectedIndices[1]]
-            ];
-            let newCard;
-            if(card1[0] !== card2[0]){
-                await channel.send(
-                    "Cards must be two cards of the same suit or both scritch cards of the same value."
-                );
-                // reset the user's reaction picks
-                await msg.reactions.cache.forEach(async r => await r.users.remove(user.id));
-                selectedIndices = [];
-                return;
-            } else if (card1[1] === 13 || card2[1] === 13) {
-                // King merge with same suit - let user choose new suit
-                let newValue = card1[1] === 13 ? card2[1] : card1[1];
-
-                // Create suit selection buttons
-                const row = new ActionRowBuilder()
-                    .addComponents(
-                        new ButtonBuilder()
-                            .setCustomId('suit_hearts')
-                            .setLabel('Hearts')
-                            .setStyle(ButtonStyle.Danger),
-                        new ButtonBuilder()
-                            .setCustomId('suit_diamonds')
-                            .setLabel('Diamonds')
-                            .setStyle(ButtonStyle.Danger),
-                        new ButtonBuilder()
-                            .setCustomId('suit_clubs')
-                            .setLabel('Clubs')
-                            .setStyle(ButtonStyle.Secondary),
-                        new ButtonBuilder()
-                            .setCustomId('suit_spades')
-                            .setLabel('Spades')
-                            .setStyle(ButtonStyle.Secondary)
-                    );
-
-                const suitMessage = await channel.send({
-                    content: `### Choose a suit for your merged card (${valueFaces[newValue]}):`,
-                    components: [row]
-                });
-
-                const suitCollector = suitMessage.createMessageComponentCollector();
-
-                suitCollector.on('collect', async i => {
-                    i.deferUpdate();
-
-                    if (i.user.id !== member.id) return;                    
-
-                    let newSuit;
-                    switch (i.customId) {
-                        case 'suit_hearts': newSuit = 0; break;
-                        case 'suit_diamonds': newSuit = 1; break;
-                        case 'suit_clubs': newSuit = 2; break;
-                        case 'suit_spades': newSuit = 3; break;
-                    }
-
-                    newCard = [newSuit, newValue];
-                
-                    if(card1[1] === 13 && card2[1] === 13){
-                        const userCatDB = await pool.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
-                            [member.id, 14, member.displayName, 'Kane']);
-                        if(userCatDB[0].affectedRows){
-                            await channel.send({content: `<@${member.id}> just gained ownership of Kane by merging two Kings! This unlocks the \`/poster\` command.`, files: ['images/cats/Kane.jpg']});
-                        }
-                    }
-
-                    // Remove them from the array, add new card
-                    cards.splice(Math.max(selectedIndices[0], selectedIndices[1]), 1);
-                    cards.splice(Math.min(selectedIndices[0], selectedIndices[1]), 1);
-                    cards.push(newCard);
-
-                    // Update DB
-                    const newHand = cards.map(card => `${card[0]},${card[1]}`).join(';');
-                    await pool.query(
-                        'UPDATE `user` SET `digica_hand` = ? WHERE `user_id` = ?;',
-                        [newHand, member.id]
-                    );
-
-                    // Remove the bot's reactions
-                    collector.stop();
-
-                    suitMessage.delete();
-
-                    // Check if further merges are possible
-                    await handleNextMerge(cards, member, channel, emojis, pool, blankEmoji);
-                    resolve();
-                });
-            } else {
-                if(card1[0] === 4){
-                    // Two Jokers => level 2 scritch
-                    newCard = [5, 2];
-                } else if (card1[0] === 5) {
-                    if(card1[1] !== card2[1]){
-                        await channel.send(
-                            "Cards must be two cards of the same suit or both scritch cards of the same value."
-                        );
-                        // reset the user's reaction picks
-                        await msg.reactions.cache.forEach(async r => await r.users.remove(user.id));
-                        selectedIndices = [];
-                        return;
-                    } else {
-                        // Same-level scritch => next level
-                        newCard = [5, card1[1] + 1];
-                    }
-                } else {
-                    // Same suit => add values
-                    let newValue = card1[1] + card2[1];
-                    if (newValue > 13) newValue -= 13;
-                    newCard = [card1[0], newValue];
-                }
-
-                // Remove them from the array, add new card
-                cards.splice(Math.max(selectedIndices[0], selectedIndices[1]), 1);
-                cards.splice(Math.min(selectedIndices[0], selectedIndices[1]), 1);
-                cards.push(newCard);
-
-                // Update DB
-                const newHand = cards.map(card => `${card[0]},${card[1]}`).join(';');
-                await pool.query(
-                    'UPDATE `user` SET `digica_hand` = ? WHERE `user_id` = ?;',
-                    [newHand, member.id]
-                );
-
-                collector.stop();
-
-                // Check if further merges are possible
-                await handleNextMerge(cards, member, channel, emojis, pool, blankEmoji);
-                resolve();
-            }
-        });
-    });
-}
-
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('digica')
@@ -515,6 +317,7 @@ module.exports = {
                         .setDescription('The user to give cards to.')
                         .setRequired(true))
                 .setDescription('Give cards to another players.')),
+    hideSubCommands: true,
     help: `Digica is a card game where players collect and merge cards to complete challenges and earn rewards.
 
 **Basic Concepts:**
@@ -524,9 +327,10 @@ module.exports = {
 - Buy card packs to build your hand
 
 **Card Packs:**
-- Each pack contains up to 3 Digica cards up to the max of 6 cards in your hand
-- Card packs give a random card from the suit of that pack
-- All packs have a chance of giving a Joker card
+- Each pack gives random Digica cards up to the max of 6 cards in your hand
+- Suit packs give up to 3 cards of the same suit
+- Random packs give up to 6 cards of any suit
+- All packs have a chance of giving Joker cards
 
 **Commands:**
 - \`/digica challenge\` - View or play the current server challenge
@@ -544,6 +348,7 @@ module.exports = {
 - Two Jokers: Creates a level 2 Scritch card
 - Same level Scritch cards: Creates next level Scritch card
 - Cards must be of the same suit or both be Scritch cards of same level
+- You can merge more than 2 cards at a time
 
 **Challenge System:**
 - Each server has an active challenge showing required cards
@@ -555,8 +360,7 @@ module.exports = {
 - Level 3: ฅ${getScritchValue(3)}
 - Level 4: ฅ${getScritchValue(4)}
 - Level 5: ฅ${getScritchValue(5)}
-- Level 6: ฅ${getScritchValue(6)}`,
-    
+- Level 6: ฅ${getScritchValue(6)}`,    
     async execute(interaction, pool, emojis) {
         const subcommand = interaction.options.getSubcommand();
         const member = interaction.member;
@@ -629,10 +433,12 @@ ${challengeCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ➡️ ${
                     fetchReply: true
                 });
 
-                const collector = message.createMessageComponentCollector();
+                const collector = message.createMessageComponentCollector({ time: 300000 });
 
                 collector.on('collect', async i => {
                     try {
+                        if(i.customId !== 'play_challenge') return;
+
                         // Has the challenge changed?
                         const stillValid = await validateChallenge(challengeCards, interaction.guildId, pool);
                         if (!stillValid) {
@@ -711,6 +517,14 @@ ${challengeCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ➡️ ${
                     }
                 });
 
+                collector.on('end', async (collected, reason) => {
+                    if (reason === 'time') {
+                        await interaction.editReply({
+                            components: []
+                        }).catch(() => {});
+                    }
+                });
+
         } else if (subcommand === 'buy') {
             const maxCards = 6;
                         
@@ -754,7 +568,7 @@ ${challengeCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ➡️ ${
                 fetchReply: true
             });
             
-            const collector = message.createMessageComponentCollector();
+            const collector = message.createMessageComponentCollector({ time: 300000 });
             
             collector.on('collect', async i => {                
                 // Check if user still has enough scritch bucks
@@ -807,11 +621,12 @@ ${challengeCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ➡️ ${
                     case 'pack_clubs': packSuit = 2; break;
                     case 'pack_spades': packSuit = 3; break;
                     case 'pack_random': packSuit = 4; break;
+                    default: return;
                 }
                 
                 // Draw cards from the pack
                 const pack = shufflePack(packSuit);
-                const numToDraw = Math.min(3, cardsCanAdd); // Draw up to 3 cards, but no more than we have space for
+                const numToDraw = Math.min(packSuit === 4 ? 6 : 3, cardsCanAdd); // Draw up to 3 cards, but no more than we have space for
                 const newCards = pack.slice(0, numToDraw);
                 
                 // Add new cards to hand
@@ -839,6 +654,15 @@ ${challengeCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')} ➡️ ${
  ${updatedHand.map(card => getSuitEmoji(card[0], emojis)).join(' ')}
  Your new balance: ฅ${latestUserRecord.scritch_bucks - cardBuy}`
                 });
+            });
+
+            collector.on('end', async (collected, reason) => {
+                if (reason === 'time') {
+                    await interaction.editReply({
+                        content: `### Buy a Card Pack for ฅ${cardBuy} (timed out)`,
+                        components: []
+                    }).catch(() => {});
+                }
             });
             } else if (subcommand === 'merge') {
                 // Show user's hand and let them pick two to merge
@@ -885,22 +709,26 @@ ${cards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
 ${cards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`);
                 }
 
-                // Present the user's hand and let them pick two
+                // Present the user's hand and let them pick cards to merge
                 const msg = await interaction.reply({ 
-                    content: `### Select two cards to merge by reacting with their numbers:
+                    content: `### Select cards to merge (react with ✅ to apply or ❌ to cancel):
 ${cards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
 ${cards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}
 ${cards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                     fetchReply: true 
                 });
 
-                // Add number reactions
+                // Add number reactions for card selection
                 for (let i = 1; i <= cards.length; i++) {
                     msg.react(getEmojiByNumber(i));
                 }
+                
+                // Add apply/decline reactions
+                msg.react('✅');
+                msg.react('❌');
 
                 // Create collector
-                const collector = msg.createReactionCollector({ dispose: true });
+                const collector = msg.createReactionCollector({ dispose: true, time: 300000 });
                 let selectedIndices = [];
 
                 collector.on('collect', async (reaction, user) => {
@@ -917,33 +745,128 @@ ${cards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                         await channel.send(
                             "Your hand has changed since starting the merge. Please try again."
                         );
+                        await msg.reactions?.removeAll().catch(() => {});
+                        collector.stop();
                         return;
                     }
 
-                    const index = getNumberByEmoji(reaction.emoji.name) - 1;
-                    if (index >= 0 && index < cards.length && !selectedIndices.includes(index)) {
-                        selectedIndices.push(index);
-                    }
+                    // Handle apply/decline reactions
+                    if (reaction.emoji.name === '✅') {
+                        if (selectedIndices.length < 2) {
+                            await channel.send("Please select at least two cards to merge!");
+                            await reaction.users.remove(user);
+                            return;
+                        }
 
-                    if (selectedIndices.length !== 2) return;
-
-                    // Merge logic
-                    const [card1, card2] = [
-                        cards[selectedIndices[0]],
-                        cards[selectedIndices[1]]
-                    ];
-                    let newCard;
-                    if(card1[0] !== card2[0]){
-                        await channel.send(
-                            "Cards must be two cards of the same suit or both scritch cards of the same value."
-                        );
-                        // reset the user's reaction picks
-                        await msg.reactions.cache.forEach(async r => await r.users.remove(user.id));
-                        selectedIndices = [];
+                        // Check if the selected cards can be merged
+                        const selectedCards = selectedIndices.map(i => cards[i]);
+                        
+                        // Special handling for jokers and scritch cards
+                        if (selectedCards.every(card => card[0] === 4 || card[0] === 5)) {
+                            // Count jokers and scritch cards by level
+                            const jokers = selectedCards.filter(card => card[0] === 4);
+                            const jokerCount = jokers.length;
+                            
+                            // Group scritch cards by level
+                            const scritchByLevel = {};
+                            selectedCards.filter(card => card[0] === 5).forEach(card => {
+                                if (!scritchByLevel[card[1]]) scritchByLevel[card[1]] = 0;
+                                scritchByLevel[card[1]]++;
+                            });
+                            
+                            // Create new cards array to replace old hand
+                            const newCards = [];
+                            
+                            // First, pair jokers to make level 2 scritch cards
+                            const newLevel2Count = Math.floor(jokerCount / 2);
+                            const leftoverJokers = jokerCount % 2;
+                            
+                            // Add level 2 scritch cards from joker pairs
+                            if (newLevel2Count > 0) {
+                                if (!scritchByLevel[2]) scritchByLevel[2] = 0;
+                                scritchByLevel[2] += newLevel2Count;
+                            }
+                            
+                            // Add leftover jokers back to hand
+                            for (let i = 0; i < leftoverJokers; i++) {
+                                newCards.push([4, 0]); // Joker
+                            }
+                            
+                            // Process each scritch level starting from 2, creating higher levels
+                            for (let level = 2; level <= 6; level++) {
+                                if (!scritchByLevel[level]) continue;
+                                
+                                // Pair cards of current level to make next level
+                                const nextLevelCount = Math.floor(scritchByLevel[level] / 2);
+                                const leftoverCount = scritchByLevel[level] % 2;
+                                
+                                // Add cards for next level
+                                if (nextLevelCount > 0 && level < 6) {
+                                    if (!scritchByLevel[level + 1]) scritchByLevel[level + 1] = 0;
+                                    scritchByLevel[level + 1] += nextLevelCount;
+                                }
+                                
+                                // Add leftover cards back to hand
+                                for (let i = 0; i < leftoverCount; i++) {
+                                    newCards.push([5, level]);
+                                }
+                            }
+                            
+                            // Add highest level scritch cards (level 6) directly
+                            for (let i = 0; i < (scritchByLevel[6] || 0); i++) {
+                                newCards.push([5, 6]);
+                            }
+                            
+                            // Remove all selected cards from original hand
+                            selectedIndices.sort((a, b) => b - a);
+                            selectedIndices.forEach(index => cards.splice(index, 1));
+                            
+                            // Add all new cards to hand
+                            cards.push(...newCards);
+                            
+                            // Update DB
+                            const newHandString = cards.map(card => `${card[0]},${card[1]}`).join(';');
+                            await pool.query(
+                                'UPDATE `user` SET `digica_hand` = ? WHERE `user_id` = ?;',
+                                [newHandString, member.id]
+                            );
+                            
+                            msg.edit({
+                                content: `### <@${member.id}>'s new Hand:
+${cards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${cards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`
+                            });
+                            
+                            collector.stop();
+                            await msg.reactions?.removeAll().catch(() => {});
                         return;
-                    } else if (card1[1] === 13 || card2[1] === 13) {
-                        // King merge with same suit - let user choose new suit
-                        let newValue = card1[1] === 13 ? card2[1] : card1[1];
+                        }
+                        
+                        // First check if all cards are the same suit (or all are jokers/scritch cards)
+                        const allSameSuit = selectedCards.every(card => card[0] === selectedCards[0][0]);
+                        if (!allSameSuit) {
+                            await channel.send("All selected cards must be of the same suit!");
+                            await reaction.users.remove(user);
+                            return;
+                        }
+                        
+                        // Check for kings (suit=any, value=13)
+                        const hasKing = selectedCards.some(card => card[1] === 13);
+                        
+                        if (hasKing) {
+                            // King merge - let user choose new suit
+                            // Calculate the new value by adding all non-king cards
+                            const nonKingCards = selectedCards.filter(card => card[1] !== 13);
+                            let newValue = 0;
+                            
+                            if (nonKingCards.length === 0) {
+                                // All kings - result should be king of selected suit
+                                newValue = 13; // King
+                            } else {
+                                // Add up values of non-king cards
+                                newValue = nonKingCards.reduce((sum, card) => sum + card[1], 0) % 13;
+                                if (newValue === 0) newValue = 13; // Handle 13 -> King
+                            }
 
                         // Create suit selection buttons
                         const row = new ActionRowBuilder()
@@ -971,7 +894,7 @@ ${cards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                             components: [row]
                         });
 
-                        const suitCollector = suitMessage.createMessageComponentCollector();
+                        const suitCollector = suitMessage.createMessageComponentCollector({ time: 300000 });
 
                         suitCollector.on('collect', async i => {
                             i.deferUpdate();
@@ -986,82 +909,137 @@ ${cards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                                 case 'suit_spades': newSuit = 3; break;
                             }
 
-                            newCard = [newSuit, newValue];
+                                const newCard = [newSuit, newValue];
                         
-                            if(card1[1] === 13 && card2[1] === 13){
+                                // Check if two kings were merged
+                                const kingCount = selectedCards.filter(card => card[1] === 13).length;
+                                if (kingCount >= 2) {
                                 const userCatDB = await pool.query('INSERT IGNORE INTO `user_cat` (user_id, cat_id, user_name, cat_name) VALUES (?, ?, ?, ?);',
                                     [member.id, 14, member.displayName, 'Kane']);
-                                if(userCatDB[0].affectedRows){
-                                    await channel.send({content: `<@${member.id}> just gained ownership of Kane by merging two Kings! This unlocks the \`/poster\` command.`, files: ['images/cats/Kane.jpg']});
+                                    if (userCatDB[0].affectedRows) {
+                                        await channel.send({
+                                            content: `<@${member.id}> just gained ownership of Kane by merging two Kings! This unlocks the \`/poster\` command.`, 
+                                            files: ['images/cats/Kane.jpg']
+                                        });
+                                    }
                                 }
-                            }
 
-                            // Remove them from the array, add new card
-                            cards.splice(Math.max(selectedIndices[0], selectedIndices[1]), 1);
-                            cards.splice(Math.min(selectedIndices[0], selectedIndices[1]), 1);
+                                // Remove selected cards from the array
+                                selectedIndices.sort((a, b) => b - a); // Sort in descending order to remove from end first
+                                selectedIndices.forEach(index => cards.splice(index, 1));
+                                
+                                // Add the new card
                             cards.push(newCard);
 
                             // Update DB
-                            const newHand = cards.map(card => `${card[0]},${card[1]}`).join(';');
+                                const newHandString = cards.map(card => `${card[0]},${card[1]}`).join(';');
                             await pool.query(
                                 'UPDATE `user` SET `digica_hand` = ? WHERE `user_id` = ?;',
-                                [newHand, member.id]
+                                    [newHandString, member.id]
                             );
-
-                            collector.stop()
 
                             suitMessage.delete();
 
-                            // Check if further merges are possible
-                            await handleNextMerge(cards, member, channel, emojis, pool, blankEmoji);
+                            msg.edit({
+                                content: `### <@${member.id}>'s new Hand:
+${cards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${cards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`
+                            });
+
+                            collector.stop();
+                                await msg.reactions?.removeAll().catch(() => {});
+                        });
+
+                        suitCollector.on('end', async (collected, reason) => {
+                            if (reason === 'time') {
+                                await suitMessage.edit({
+                                    content: `### Suit selection timed out (${valueFaces[newValue]})`,
+                                    components: []
+                                }).catch(() => {});
+                            }
                         });
                     } else {
-                        if(card1[0] === 4){
-                            // Two Jokers => level 2 scritch
-                            newCard = [5, 2];
-                        } else if (card1[0] === 5) {
-                            if(card1[1] !== card2[1]){
-                                await channel.send(
-                                    "Cards must be two cards of the same suit or both scritch cards of the same value."
-                                );
-                                // reset the user's reaction picks
-                                await msg.reactions.cache.forEach(async r => await r.users.remove(user.id));
-                                selectedIndices = [];
-                                return;
-                            } else {
+                            let newCard;
+                            
+                            if (selectedCards[0][0] === 4) {
+                                // Jokers => level 2+ scritch
+                                // 2 jokers = level 2, 3 jokers = level 3, etc.
+                                newCard = [5, Math.min(selectedCards.length, 6)]; // Cap at level 6
+                            } else if (selectedCards[0][0] === 5) {
                                 // Same-level scritch => next level
-                                newCard = [5, card1[1] + 1];
-                            }
+                                newCard = [5, selectedCards[0][1] + selectedCards.length - 1];
+                                // Cap at level 6
+                                if (newCard[1] > 6) newCard[1] = 6;
                         } else {
                             // Same suit => add values
-                            let newValue = card1[1] + card2[1];
-                            if (newValue > 13) newValue -= 13;
-                            newCard = [card1[0], newValue];
-                        }
+                                let newValue = selectedCards.reduce((sum, card) => sum + card[1], 0);
+                                while (newValue > 13) newValue -= 13;
+                                newCard = [selectedCards[0][0], newValue];
+                            }
 
-                        // Remove them from the array, add new card
-                        cards.splice(Math.max(selectedIndices[0], selectedIndices[1]), 1);
-                        cards.splice(Math.min(selectedIndices[0], selectedIndices[1]), 1);
+                            // Remove selected cards from the array
+                            selectedIndices.sort((a, b) => b - a); // Sort in descending order to remove from end first
+                            selectedIndices.forEach(index => cards.splice(index, 1));
+                            
+                            // Add the new card
                         cards.push(newCard);
 
                         // Update DB
-                        const newHand = cards.map(card => `${card[0]},${card[1]}`).join(';');
+                            const newHandString = cards.map(card => `${card[0]},${card[1]}`).join(';');
                         await pool.query(
                             'UPDATE `user` SET `digica_hand` = ? WHERE `user_id` = ?;',
-                            [newHand, member.id]
+                                [newHandString, member.id]
                         );
 
-                        // Remove the bot's reactions
-                        collector.stop();
+                        msg.edit({
+                            content: `### <@${member.id}>'s new Hand:
+${cards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${cards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`
+                        });
 
-                        // Check if further merges are possible
-                        await handleNextMerge(cards, member, channel, emojis, pool, blankEmoji);
+                        collector.stop();
+                            await msg.reactions?.removeAll().catch(() => {});
+                        }
+                    } else if (reaction.emoji.name === '❌') {
+                        // Show the current hand without changes
+                        await msg.edit({
+                            content: `### Your hand (no changes):
+${cards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${cards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`
+                        });
+                        
+                        await msg.reactions?.removeAll().catch(() => {});
+                        collector.stop();
+                    } else {
+                        // Handle number reactions for card selection
+                        const index = getNumberByEmoji(reaction.emoji.name) - 1;
+                        if (index >= 0 && index < cards.length) {
+                            if (!selectedIndices.includes(index)) {
+                                selectedIndices.push(index);
+                            } else {
+                                selectedIndices = selectedIndices.filter(i => i !== index);
+                            }
+                        }
                     }
                 });
 
                 collector.on('remove', (reaction, user) => {
+                    if (user.bot) return;
+                    if (reaction.emoji.name !== '✅' && reaction.emoji.name !== '❌') {
                     const index = getNumberByEmoji(reaction.emoji.name) - 1;
                     selectedIndices = selectedIndices.filter(i => i !== index);
+                    }
+                });
+
+                collector.on('end', async (collected, reason) => {
+                    if (reason === 'time') {
+                        await msg.edit({
+                            content: `### Card merging timed out:
+${cards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${cards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`
+                        }).catch(() => {});
+                        await msg.reactions?.removeAll().catch(() => {});
+                    }
                 });
             } else if (subcommand === 'discard') {
                 try {
@@ -1095,7 +1073,7 @@ ${cards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                     message.react('✅');
                     message.react('❌');
 
-                    const collector = message.createReactionCollector({ dispose: true });
+                    const collector = message.createReactionCollector({ dispose: true, time: 300000 });
                     let selectedIndices = [];
 
                     collector.on('collect', async (reaction, user) => {
@@ -1119,6 +1097,7 @@ ${cards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                         if (reaction.emoji.name === '✅') {
                             if (selectedIndices.length === 0) {
                                 await channel.send("Please select at least one card to discard!");
+                                await reaction.users.remove(user);
                                 return;
                             }
 
@@ -1197,6 +1176,17 @@ ${cards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`
                             selectedIndices = selectedIndices.filter(i => i !== index);
                         }
                     });
+
+                    collector.on('end', async (collected, reason) => {
+                        if (reason === 'time') {
+                            await message.edit({
+                                content: `### Card discard selection timed out:
+${cards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${cards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`
+                            }).catch(() => {});
+                            await message.reactions?.removeAll().catch(() => {});
+                        }
+                    });
                 } catch (error) {
                     console.error("Error in discard command:", error);
                     await interaction.editReply("An error occurred while processing your request.").catch(() => {});
@@ -1270,7 +1260,7 @@ ${targetUser.username} has ${recipientCards.length}/${maxCards} cards (space for
                 message.react('✅');
                 message.react('❌');
                 
-                const collector = message.createReactionCollector({ dispose: true });
+                const collector = message.createReactionCollector({ dispose: true, time: 300000 });
                 let selectedIndices = [];
                 
                 collector.on('collect', async (reaction, user) => {
@@ -1294,6 +1284,7 @@ ${targetUser.username} has ${recipientCards.length}/${maxCards} cards (space for
                     if (reaction.emoji.name === '✅') {
                         if (selectedIndices.length === 0) {
                             await channel.send("Please select at least one card to give!");
+                            await reaction.users.remove(user);
                             return;
                         }
                         
@@ -1413,6 +1404,17 @@ ${giverCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`,
                         selectedIndices = selectedIndices.filter(i => i !== index);
                     }
                 });
+
+                collector.on('end', async (collected, reason) => {
+                    if (reason === 'time') {
+                        await message.edit({
+                            content: `### Card giving timed out:
+${giverCards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${giverCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`
+                        }).catch(() => {});
+                        await message.reactions?.removeAll().catch(() => {});
+                    }
+                });
             } catch (error) {
                 console.error("Error in give command:", error);
             return interaction.reply("An error occurred while processing your request.");
@@ -1452,7 +1454,7 @@ ${traderCards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                 message.react('✅');
                 message.react('❌');
                 
-                const collector = message.createReactionCollector({ dispose: true });
+                const collector = message.createReactionCollector({ dispose: true, time: 300000 });
                 let selectedIndices = [];
                 
                 collector.on('collect', async (reaction, user) => {
@@ -1477,6 +1479,7 @@ ${traderCards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                     if (reaction.emoji.name === '✅') {
                         if (selectedIndices.length === 0) {
                             await channel.send("Please select at least one card to offer!");
+                            await reaction.users.remove(user);
                             return;
                         }
                         
@@ -1508,9 +1511,22 @@ Click the button below to offer your cards in exchange!`,
                         // Track users who are currently making offers
                         const activeOffers = new Set();
                         
-                        const offerCollector = message.createMessageComponentCollector();
+                        const offerCollector = message.createMessageComponentCollector({ time: 300000 });
+                        
+                        offerCollector.on('end', async (collected, reason) => {
+                            if (reason === 'time') {
+                                await interaction.editReply({
+                                    content: `### Trade offers timed out:
+${cardsToOffer.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${cardsToOffer.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`,
+                                    components: []
+                                }).catch(() => {});
+                            }
+                        });
                         
                         offerCollector.on('collect', async i => {
+                            if(i.customId !== 'trade_offer') return;
+                            
                             // Don't allow the original trader to respond
                             if (i.user.id === member.id) {
                                 await i.reply({ content: "You can't trade with yourself!", ephemeral: true });
@@ -1585,7 +1601,8 @@ ${responderCards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}
                             // Create collector for the responder's emoji reactions
                             const responderCollector = responderMsg.createReactionCollector({ 
                                 filter: (reaction, user) => !user.bot && user.id === i.user.id,
-                                dispose: true
+                                dispose: true,
+                                time: 300000
                             });
                             
                             let selectedIndices = [];
@@ -1596,6 +1613,7 @@ ${responderCards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}
                                     // Validate the selection
                                     if (selectedIndices.length === 0) {
                                         await channel.send(`<@${i.user.id}>, please select at least one card to offer!`);
+                                        await reaction.users.remove(user);
                                         return;
                                     }
                                     
@@ -1612,7 +1630,7 @@ ${responderCards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}
                                     if (!traderStillValid) {
                                         await channel.send(`<@${i.user.id}>, the trader's cards have changed. This trade is no longer valid.`);
                                         await interaction.editReply({ components: [] }).catch(() => {});
-                                        offerCollector.stop();
+                                        responderCollector.stop();
                                         return;
                                     }
                                   
@@ -1659,6 +1677,7 @@ Waiting for <@${member.id}> to respond...`
                                         filter: buttonInteraction => 
                                             (buttonInteraction.customId === 'accept_trade' || buttonInteraction.customId === 'decline_trade') && 
                                             buttonInteraction.user.id === member.id,
+                                        time: 300000
                                     });
                                     
                                     decisionCollector.on('collect', async buttonInteraction => {
@@ -1802,6 +1821,22 @@ ${responderCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`
                                 const index = getNumberByEmoji(reaction.emoji.name) - 1;
                                 selectedIndices = selectedIndices.filter(i => i !== index);
                             });
+
+                            responderCollector.on('end', async (collected, reason) => {
+                                if (reason === 'time' && !responderMsg.deleted) {
+                                    await responderMsg.edit({
+                                        content: `### Counter offer timed out:
+${responderCards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${responderCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`
+                                    }).catch(() => {});
+                                    await responderMsg.reactions?.removeAll().catch(() => {});
+                                    
+                                    // Remove user from active offers
+                                    if (activeOffers.has(i.user.id)) {
+                                        activeOffers.delete(i.user.id);
+                                    }
+                                }
+                            });
                         });
                         
                     } else if (reaction.emoji.name === '❌') {
@@ -1834,6 +1869,17 @@ ${traderCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`,
                     if (reaction.emoji.name !== '✅' && reaction.emoji.name !== '❌') {
                         const index = getNumberByEmoji(reaction.emoji.name) - 1;
                         selectedIndices = selectedIndices.filter(i => i !== index);
+                    }
+                });
+
+                collector.on('end', async (collected, reason) => {
+                    if (reason === 'time') {
+                        await message.edit({
+                            content: `### Card trade selection timed out:
+${traderCards.map(card => getValueEmoji(card[0], card[1], emojis)).join(' ')}
+${traderCards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`
+                        }).catch(() => {});
+                        await message.reactions?.removeAll().catch(() => {});
                     }
                 });
                 

@@ -80,7 +80,7 @@ module.exports = {
 
 			const filter = (reaction, user) => !user.bot;
 
-			const collector = shop.createReactionCollector({filter});
+			const collector = shop.createReactionCollector({filter, time: 300000});
 			
 			collector.on('collect', async (reaction, user) => {
 				reaction.users.remove(user.id);
@@ -198,7 +198,13 @@ module.exports = {
 // 					conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);', 
 // 						[user.id, newScritchBucks, user.username]);
 // 				}
-			});
+			});	
+
+            collector.on('end', async () => {
+                // Remove buttons when collector expires
+				await shop.reactions?.removeAll().catch(() => {});
+				await interaction.editReply(`**Shop has closed.**\n${msg}`);
+            });
 
 			// Limit total items to 9 (since we're using 1-9 reactions)
 			const maxItems = Math.min(catDB[0].length, 9);

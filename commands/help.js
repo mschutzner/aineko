@@ -85,7 +85,7 @@ The command list is paginated if there are many commands. Use the Previous/Next 
                 const regularOptions = options.filter(opt => opt.hasOwnProperty('type'));
 
                 // Handle subcommands if they exist
-                if (subcommands.length > 1) {
+                if (subcommands.length > 1 && !command.hideSubCommands) {
                     const subcommandsEmbed = {
                         color: 0x0099FF,
                         title: 'Subcommands',
@@ -101,7 +101,7 @@ The command list is paginated if there are many commands. Use the Previous/Next 
 
                         // Add subcommand options if they exist
                         if (subcmd.options?.length > 0) {
-                            subcommandDetails += '\n**Parameters:**\n' + subcmd.options
+                            subcommandDetails += '**Parameters:**\n' + subcmd.options
                                 .map(opt => `• \`${opt.name}\` - ${opt.description}${opt.required ? ' (Required)' : ''}`)
                                 .join('\n');
                         }
@@ -222,7 +222,8 @@ The command list is paginated if there are many commands. Use the Previous/Next 
         // Only create collector if there are multiple pages
         if (pages.length > 1) {
             const collector = response.createMessageComponentCollector({ 
-                filter: i => i.user.id === interaction.user.id 
+                filter: i => i.user.id === interaction.user.id,
+                time: 300000 
             });
 
             collector.on('collect', async i => {
@@ -230,7 +231,7 @@ The command list is paginated if there are many commands. Use the Previous/Next 
                     currentPage--;
                 } else if (i.customId === 'next') {
                     currentPage++;
-                }
+                } else return;
 
                 await i.update({
                     embeds: [botInfoEmbed, commandsEmbed(currentPage)],

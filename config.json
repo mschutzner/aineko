@@ -13,7 +13,7 @@
     "images/facepalm/facepalm-picard.gif",
     "images/facepalm/facepalm-michael.gif"
   ],
-  "cardBuy": 64,
-  "cardSell": 50,
-  "cardMultiplier": 2.51
+  "cardBuy": 16,
+  "cardSell": 32,
+  "cardMultiplier": 2.5
 }

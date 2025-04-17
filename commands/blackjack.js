@@ -204,6 +204,8 @@ ${formatCards(currentHand.hand, emojis)}`,
 
                     const result = await new Promise((resolve) => {
                         collector.on('collect', async i => {
+							if(i.customId !== 'hit' && i.customId !== 'stand' && i.customId !== 'double_down' && i.customId !== 'surrender' && i.customId !== 'split') return;
+							
                             if (i.user.id !== player.id) {
                                 await i.reply({ content: "It's not your turn!", ephemeral: true });
                                 return;
@@ -651,6 +653,8 @@ This option expires <t:${Math.ceil(insuranceTime/1000)+22}:R>`,
 
 								const insuranceResponse = await new Promise(resolve => {
 									insuranceCollector.on('collect', async i => {
+										if(i.customId !== 'yes' && i.customId !== 'no') return;
+
 										if (i.user.id !== player.id) {
 											await i.reply({ content: "This insurance option isn't for you!", ephemeral: true });
 											return;
