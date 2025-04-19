@@ -147,5 +147,11 @@ module.exports = {
         } else {
             return `${seconds} second${seconds !== 1 ? 's' : ''}`;
         }
-    }
+    },
+    getKeyByValue(object, value) {
+        return Object.keys(object).find(key => object[key] === value);
+    },
+    capitalizeFirstLetter(string) {
+        return string.charAt(0).toUpperCase() + string.slice(1);
+    },
 }
