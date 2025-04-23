@@ -120,6 +120,7 @@ Player 1 wins with a total of 15!
             await interaction.reply({
                 content: `🎲 **${interaction.member.toString()}** is starting a game of Dwarven Dice!\n` +
                     `Buy-In: ฅ${buyin}\n` +
+                    `Pot: ฅ${buyin * 2}\n` +
                     `Game starts <t:${Math.ceil(startTime/1000)+62}:R> or when the host starts it\n` +
                     `## Players\n` +
                     `House 5 bones\n` +
@@ -280,6 +281,7 @@ Player 1 wins with a total of 15!
                         await message.edit({
                             content: `🎲 **${interaction.member.toString()}** is starting a game of Dwarven Dice!\n` +
                                 `Buy-In: ฅ${buyin}\n` +
+                                `Pot: ฅ${buyin * players.size}\n` +
                                 `Game starts <t:${Math.ceil(startTime/1000)+62}:R> or when the host starts it\n` +
                                 `## Players\n` +
                                 `${Array.from(players.values()).map(p => `${p.member.toString()} ${p.bones} bones`).join('\n')}`,
@@ -339,6 +341,8 @@ Player 1 wins with a total of 15!
                         await conn.query('INSERT INTO `user_scritch` (`user_id`, `amount`, `user_name`) VALUES (?, ?, ?);',
                             [userId, newAmount, participant.member.user.username]);
                     }
+
+                    await conn.query('DELETE FROM `game` WHERE `channel_id` = ?;', [channel.id]);
 
                     await channel.send('Game cancelled by host. All Buy-Ins have been refunded.');
                     return;

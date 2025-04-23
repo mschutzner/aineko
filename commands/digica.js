@@ -346,7 +346,7 @@ module.exports = {
 - Aces are low (value 1)
 - Kings instead let you choose a new suit for your merged card
 - Two Jokers: Creates a level 2 Scritch card
-- Same level Scritch cards: Creates next level Scritch card
+- Same level Scritch cards: Creates next level Scritch card up to level 6
 - Cards must be of the same suit or both be Scritch cards of same level
 - You can merge more than 2 cards at a time
 
@@ -693,7 +693,7 @@ ${cards.map(card => getSuitEmoji(card[0], emojis)).join(' ')}`);
                     for (let j = i + 1; j < cards.length; j++) {
                         if (
                             (cards[i][0] === 4 && cards[j][0] === 4) ||
-                            (cards[i][0] === 5 && cards[j][0] === 5 && cards[i][1] === cards[j][1]) ||
+                            (cards[i][0] === 5 && cards[j][0] === 5 && cards[i][1] === cards[j][1] && cards[i][1] < 6) ||
                             (cards[i][0] === cards[j][0] && cards[i][0] !== 5)
                         ) {
                             hasMergeable = true;
@@ -763,6 +763,13 @@ ${cards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                         
                         // Special handling for jokers and scritch cards
                         if (selectedCards.every(card => card[0] === 4 || card[0] === 5)) {
+                            // Check if any level 6 scritch cards were selected (they can't be merged)
+                            if (selectedCards.some(card => card[0] === 5 && card[1] === 6)) {
+                                await channel.send("Level 6 Scritch cards cannot be merged!");
+                                await reaction.users.remove(user);
+                                return;
+                            }
+                            
                             // Count jokers and scritch cards by level
                             const jokers = selectedCards.filter(card => card[0] === 4);
                             const jokerCount = jokers.length;
@@ -777,7 +784,7 @@ ${cards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                             // Create new cards array to replace old hand
                             const newCards = [];
                             
-                            // First, pair jokers to make level 2 scritch cards
+                            // First pass: pair jokers to make level 2 scritch cards
                             const newLevel2Count = Math.floor(jokerCount / 2);
                             const leftoverJokers = jokerCount % 2;
                             
@@ -793,7 +800,7 @@ ${cards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                             }
                             
                             // Process each scritch level starting from 2, creating higher levels
-                            for (let level = 2; level <= 6; level++) {
+                            for (let level = 2; level <= 5; level++) {
                                 if (!scritchByLevel[level]) continue;
                                 
                                 // Pair cards of current level to make next level
@@ -801,7 +808,7 @@ ${cards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                                 const leftoverCount = scritchByLevel[level] % 2;
                                 
                                 // Add cards for next level
-                                if (nextLevelCount > 0 && level < 6) {
+                                if (nextLevelCount > 0) {
                                     if (!scritchByLevel[level + 1]) scritchByLevel[level + 1] = 0;
                                     scritchByLevel[level + 1] += nextLevelCount;
                                 }
@@ -812,9 +819,11 @@ ${cards.map((_, i) => getEmojiIdByNumber(i+1)).join(' ')}`,
                                 }
                             }
                             
-                            // Add highest level scritch cards (level 6) directly
-                            for (let i = 0; i < (scritchByLevel[6] || 0); i++) {
-                                newCards.push([5, 6]);
+                            // Add level 6 scritch cards directly
+                            if (scritchByLevel[6]) {
+                                for (let i = 0; i < scritchByLevel[6]; i++) {
+                                    newCards.push([5, 6]);
+                                }
                             }
                             
                             // Remove all selected cards from original hand

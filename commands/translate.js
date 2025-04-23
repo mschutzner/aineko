@@ -81,9 +81,9 @@ module.exports = {
 				toLanguage: to,
 			})
 			.then(async (data) => {
-				await interaction.reply(`## Translation from ${fromInput}
+				await interaction.reply(`##  Original text in ${fromInput}:
 ${text}
-## Translation to ${toInput}
+## Translation to ${toInput}:
 ${data[0].translation}`);
 			});
 	},
